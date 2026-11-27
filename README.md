@@ -71,7 +71,7 @@ fly deploy --ha=false
 * **Machine:** `shared-cpu-2x` with 1 GB RAM. The Ragu prover peaks near 360 MB, so 512 MB is too tight. On this size a fold takes about 5 s (about 2 s on an M-series laptop).
 * **Idle behaviour:** the machine stops when idle and wakes on the next request. Studio state is in memory and shared by all visitors, so a stop or anyone's "Reset session" clears it.
 * **First deploy of a new app:** allocate addresses once with `fly ips allocate-v4 --shared` and `fly ips allocate-v6`.
-* **Lockfile:** the Docker build uses `cargo build --locked`, so `Cargo.lock` must be present in the build context (it is currently git-ignored).
+* **Lockfile:** `Cargo.lock` is committed and the Docker build uses `cargo build --locked`, so every build uses the same pinned Ragu revision.
 
 ## Documentation
 * [Whitepaper (`docs/WHITEPAPER.md`)](docs/WHITEPAPER.md) — served live as HTML at `/whitepaper`
