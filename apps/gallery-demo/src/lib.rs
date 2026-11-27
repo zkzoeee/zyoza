@@ -1,5 +1,6 @@
 //! Opt-in viewing-key gallery & sealed-bid auction demo for Zyoza NFTs.
 
+pub mod demo_engine;
 pub mod http;
 
 use anyhow::{bail, Result};

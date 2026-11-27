@@ -1,0 +1,489 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Zyoza Lifecycle Studio — Mint, Fold, Disclose, Trade &amp; Crystallize</title>
+  <style>
+    :root {
+      --washi: #F7F4ED;
+      --washi-alt: #EFEBE1;
+      --card: #FAF8F3;
+      --sumi: #171614;
+      --sumi-muted: #5C5852;
+      --line: #DDD7C9;
+      --hanko: #C53D2F;
+      --pine: #215A3E;
+      --gold: #9A6B10;
+      --serif: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", Georgia, serif;
+      --sans: -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
+      --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--washi); color: var(--sumi); font-family: var(--sans); line-height: 1.55; }
+    a { color: inherit; text-decoration: none; }
+    header { border-bottom: 1px solid var(--line); padding: 1.1rem 2rem; display: flex; justify-content: space-between; align-items: center; background: var(--card); }
+    .brand { display: flex; align-items: center; gap: 0.65rem; font-family: var(--serif); font-size: 1.1rem; }
+    .hanko { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 2px solid var(--hanko); color: var(--hanko); font-family: var(--serif); font-weight: 700; font-size: 0.65rem; line-height: 1.05; text-align: center; border-radius: 2px; }
+    .nav-links { display: flex; gap: 1.25rem; font-size: 0.86rem; color: var(--sumi-muted); }
+
+    .layout { max-width: 1220px; margin: 0 auto; padding: 2rem; display: grid; grid-template-columns: 1.35fr 0.9fr; gap: 2rem; align-items: start; }
+    @media (max-width: 940px) { .layout { grid-template-columns: 1fr; } }
+
+    .step-card { background: var(--card); border: 1px solid var(--line); padding: 1.4rem 1.5rem; margin-bottom: 1.25rem; }
+    .step-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
+    .step-num { font-family: var(--serif); color: var(--hanko); font-size: 0.88rem; }
+    .step-badge { font-family: var(--mono); font-size: 0.7rem; padding: 2px 8px; border: 1px solid var(--line); color: var(--sumi-muted); background: var(--washi); }
+    .step-badge.done { border-color: var(--pine); color: var(--pine); background: #E9F3EE; }
+    h2 { font-family: var(--serif); font-weight: 500; font-size: 1.2rem; margin-bottom: 0.4rem; }
+    p.desc { font-size: 0.87rem; color: var(--sumi-muted); margin-bottom: 1rem; }
+
+    .row { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; margin-bottom: 0.75rem; }
+    select, input {
+      background: var(--washi);
+      border: 1px solid var(--line);
+      color: var(--sumi);
+      padding: 0.48rem 0.65rem;
+      font-size: 0.84rem;
+      font-family: var(--sans);
+    }
+    button {
+      background: var(--sumi);
+      color: var(--washi);
+      border: 1px solid var(--sumi);
+      padding: 0.5rem 0.95rem;
+      font-size: 0.82rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.12s;
+    }
+    button:hover:not(:disabled) { background: var(--hanko); border-color: var(--hanko); }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    button.secondary { background: transparent; color: var(--sumi); border-color: var(--line); }
+    button.secondary:hover:not(:disabled) { border-color: var(--sumi); background: var(--washi-alt); }
+
+    .kv { background: var(--washi); border: 1px solid var(--line); padding: 0.75rem; font-family: var(--mono); font-size: 0.74rem; word-break: break-all; margin-top: 0.6rem; }
+    .kv div { margin-bottom: 0.28rem; }
+    .kv div:last-child { margin-bottom: 0; }
+    .kv span { color: var(--sumi-muted); }
+
+    /* Sticky Inspector */
+    .inspector { position: sticky; top: 1.5rem; background: var(--card); border: 1px solid var(--line); padding: 1.4rem; }
+    .art-row { display: flex; gap: 1rem; align-items: center; margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid var(--line); }
+    #demo-svg { width: 96px; height: 96px; border: 1px solid var(--line); background: #14161B; flex-shrink: 0; }
+    .memo-bar { display: grid; grid-template-columns: 8% 6% 8% 20% 20% 38%; height: 22px; border: 1px solid var(--sumi); font-family: var(--mono); font-size: 0.62rem; text-align: center; line-height: 20px; margin: 0.6rem 0; overflow: hidden; }
+    .m-magic { background: var(--hanko); color: #fff; }
+    .m-prof { background: #D9D0BE; }
+    .m-aid { background: #E6DFCF; }
+    .m-root { background: #EFECE3; }
+    .m-uri { background: var(--washi); color: var(--sumi-muted); }
+
+    .log { background: #151619; color: #D8DEE9; font-family: var(--mono); font-size: 0.73rem; padding: 0.85rem; height: 290px; overflow-y: auto; line-height: 1.5; margin-top: 0.75rem; }
+    .log .ok { color: #8FBCBB; }
+    .log .err { color: #BF616A; }
+    .log .hl { color: #EBCB8B; }
+  </style>
+</head>
+<body>
+  <header>
+    <a href="/" class="brand">
+      <span class="hanko">餃子<br/>ZYOZ</span>
+      <span>Zyoza Lifecycle Studio</span>
+    </a>
+    <nav class="nav-links">
+      <a href="/">← Landing Page</a>
+      <a href="/whitepaper">Whitepaper</a>
+    </nav>
+  </header>
+
+  <div class="layout">
+    <div>
+      <!-- STEP 1: GOVERNED MINT -->
+      <div class="step-card">
+        <div class="step-head">
+          <span class="step-num">壱 · Step 1 — Governed Mint &amp; 512B Orchard Seal</span>
+          <span id="badge-1" class="step-badge">Ready</span>
+        </div>
+        <h2>Mint a Shielded Specimen (<code>CollectionSpec</code>)</h2>
+        <p class="desc">Derives ZIP 227 <code>AssetId</code> + Pallas <code>AssetBase</code>, encrypts the payload out-of-band, and consumes deterministic anti-duplicate nullifiers (<code>NF_aid</code>, <code>NF_idx</code>, <code>NF_med</code>).</p>
+        <div class="row">
+          <select id="preset" onchange="renderPresetArt()">
+            <option value="nounz-venetian">Nounz #01 — Venetian Gold (⌐≡-≡)</option>
+            <option value="nounz-mesh">Nounz #02 — Stealth Mesh (⌐▓-▓)</option>
+            <option value="nounz-ovk">Nounz #03 — OVK Peek (⌐≡-◨)</option>
+            <option value="lootz-kit">Lootz Bag #07 — Dumpling Syndicate Kit</option>
+          </select>
+          <input id="slot-idx" type="number" value="1" min="1" max="100" style="width:82px" title="Token Slot (1..=100)" />
+          <button onclick="doMint()">Mint Shielded Zyoza</button>
+          <button id="btn-dup" class="secondary" onclick="doDuplicateAttack()" disabled>Test Duplicate Mint Attack</button>
+        </div>
+        <div id="out-1" class="kv" style="display:none"></div>
+      </div>
+
+      <!-- STEP 2: OOB P2P TRANSFER -->
+      <div class="step-card">
+        <div class="step-head">
+          <span class="step-num">弐 · Step 2 — Out-of-Band Key Handover (Alice → Bob)</span>
+          <span id="badge-2" class="step-badge">Locked</span>
+        </div>
+        <h2>Transfer &amp; Re-Wrap DEK via Pallas ECDH</h2>
+        <p class="desc">Spends Alice's Orchard single-use seal nullifier and re-wraps the <code>ChaCha20Poly1305</code> DEK for Bob's Pallas public key without re-uploading encrypted media.</p>
+        <div class="row">
+          <button id="btn-xfer" onclick="doTransfer()" disabled>Transfer Alice → Bob</button>
+          <button id="btn-dec-alice" class="secondary" onclick="tryDecrypt('alice')" disabled>Decrypt as Alice</button>
+          <button id="btn-dec-bob" class="secondary" onclick="tryDecrypt('bob')" disabled>Decrypt as Bob</button>
+        </div>
+        <div id="out-2" class="kv" style="display:none"></div>
+      </div>
+
+      <!-- STEP 3: RAGU NON-UNIFORM PCD -->
+      <div class="step-card">
+        <div class="step-head">
+          <span class="step-num">参 · Step 3 — Ragu Non-Uniform PCD Lineage Folding</span>
+          <span id="badge-3" class="step-badge">Locked</span>
+        </div>
+        <h2>Fold Heterogeneous Subcircuits in Constant Size</h2>
+        <p class="desc">Fold royalty enforcement, anonymous event check-ins (<code>TKT1</code>), and gear upgrades (<code>GAM1</code>) into one constant-size recursive proof—hiding all past owners.</p>
+        <div class="row">
+          <button id="btn-fold-royalty" onclick="doFold('RoyaltyStep', 'NFT1')" disabled>+ Fold RoyaltyStep (NFT1)</button>
+          <button id="btn-fold-ticket" class="secondary" onclick="doFold('TicketCheckInStep', 'TKT1')" disabled>+ Fold TicketCheckIn (TKT1)</button>
+          <button id="btn-fold-upgrade" class="secondary" onclick="doFold('AttributeUpgradeStep', 'GAM1')" disabled>+ Fold UpgradeStep (GAM1)</button>
+        </div>
+        <div id="out-3" class="kv" style="display:none"></div>
+      </div>
+
+      <!-- STEP 4: OVK DISCLOSURE & HALO2 GALLERY LISTING -->
+      <div class="step-card">
+        <div class="step-head">
+          <span class="step-num">肆 · Step 4 — Selective Disclosure (<code>OVK</code>) &amp; Halo2 Proof</span>
+          <span id="badge-4" class="step-badge">Locked</span>
+        </div>
+        <h2>List Privately with a Halo2 Pasta Ownership Badge</h2>
+        <p class="desc">Share a per-object <code>ObjectViewingKey</code> + Halo2 ZK proof to unlock *only* this item on the gallery while keeping your Zcash wallet completely dark.</p>
+        <div class="row">
+          <button id="btn-toggle-ovk" class="secondary" onclick="toggleOvkPreview()" disabled>Toggle: Shielded vs OVK View</button>
+          <input id="reserve-zats" type="number" value="50000000" style="width:140px" title="Reserve (zatoshis)" />
+          <button id="btn-list" onclick="doListGallery()" disabled>Prove Halo2 &amp; List on Gallery</button>
+        </div>
+        <div id="out-4" class="kv" style="display:none"></div>
+      </div>
+
+      <!-- STEP 5: SEALED-BID DARK-POOL AUCTION -->
+      <div class="step-card">
+        <div class="step-head">
+          <span class="step-num">伍 · Step 5 — Sealed-Bid Shielded ZEC Auction</span>
+          <span id="badge-5" class="step-badge">Locked</span>
+        </div>
+        <h2>Submit Blinded ZEC Bids &amp; Clear Without Front-Running</h2>
+        <p class="desc">Collectors submit sealed ZEC commitments; losing bids remain private and the highest bid ≥ reserve wins.</p>
+        <div class="row">
+          <input id="bidder-name" value="carol" style="width:100px" />
+          <input id="bid-zats" type="number" value="85000000" style="width:130px" />
+          <button id="btn-bid" onclick="doBid()" disabled>Submit Sealed Bid</button>
+          <button id="btn-clear" class="secondary" onclick="doClear()" disabled>Clear Auction</button>
+        </div>
+        <div id="out-5" class="kv" style="display:none"></div>
+      </div>
+
+      <!-- STEP 6: ZSA CRYSTALLIZATION -->
+      <div class="step-card">
+        <div class="step-head">
+          <span class="step-num">陸 · Step 6 — Burn-to-Crystallize into Native ZSA</span>
+          <span id="badge-6" class="step-badge">Locked</span>
+        </div>
+        <h2>1:1 Upgrade via Halo2 Migration + 2-of-3 Pallas FROST</h2>
+        <p class="desc">Retires the Stage I Orchard memo seal and mints a native ZIP 226/227 <code>ZsaNote</code> (<code>value = 1</code>, finalized supply) with the exact same <code>AssetId</code> &amp; <code>AssetBase</code>.</p>
+        <div class="row">
+          <button id="btn-crys" onclick="doCrystallize()" disabled>Burn Orchard Seal &amp; Crystallize ZSA</button>
+        </div>
+        <div id="out-6" class="kv" style="display:none"></div>
+      </div>
+    </div>
+
+    <!-- RIGHT INSPECTOR -->
+    <aside class="inspector">
+      <div class="art-row">
+        <svg id="demo-svg" viewBox="0 0 32 32" shape-rendering="crispEdges"></svg>
+        <div>
+          <div style="font-family:var(--mono);font-size:0.72rem;color:var(--hanko)" id="insp-stage">STAGE: UNMINTED</div>
+          <div style="font-family:var(--serif);font-size:1.15rem" id="insp-title">Nounz #01 (⌐≡-≡)</div>
+          <div style="font-size:0.82rem;color:var(--sumi-muted)" id="insp-owner">Owner: —</div>
+        </div>
+      </div>
+
+      <div style="font-family:var(--mono);font-size:0.72rem;color:var(--sumi-muted)">512-BYTE ORCHARD MEMO SEAL ("ZYOZ")</div>
+      <div class="memo-bar" title="0..4 ZYOZ | 4..6 v1 | 6..10 Profile | 10..42 AssetId | 42..74 StateRoot | 140..512 OOB URI">
+        <div class="m-magic">ZYOZ</div>
+        <div class="m-prof" id="m-prof">NFT1</div>
+        <div class="m-prof">v1</div>
+        <div class="m-aid">AssetId (32B)</div>
+        <div class="m-root">Root (32B)</div>
+        <div class="m-uri">Nonce + OOB URI (372B)</div>
+      </div>
+
+      <div style="font-family:var(--mono);font-size:0.72rem;color:var(--sumi-muted);margin-top:1rem">CRYPTOGRAPHIC TELEMETRY LOG</div>
+      <div id="log" class="log">
+        <div><span class="hl">[zyoza]</span> Ready. Select a Nounz or Lootz specimen and click Mint.</div>
+      </div>
+    </aside>
+  </div>
+
+  <script>
+    let S = { sessionId: null, assetId: null, assetBase: null, owner: null, ovkOpen: false, listingId: null, hops: 0 };
+
+    function log(msg, cls = '') {
+      const el = document.getElementById('log');
+      const d = document.createElement('div');
+      if (cls) d.className = cls;
+      d.innerHTML = msg;
+      el.appendChild(d);
+      el.scrollTop = el.scrollHeight;
+    }
+
+    function renderPresetArt() {
+      const p = document.getElementById('preset').value;
+      const svg = document.getElementById('demo-svg');
+      const titles = {
+        'nounz-venetian': 'Nounz #01 (⌐≡-≡)',
+        'nounz-mesh': 'Nounz #02 (⌐▓-▓)',
+        'nounz-ovk': 'Nounz #03 (⌐≡-◨)',
+        'lootz-kit': 'Lootz Bag #07 (GAM1)'
+      };
+      document.getElementById('insp-title').textContent = titles[p];
+      document.getElementById('m-prof').textContent = p === 'lootz-kit' ? 'GAM1' : 'NFT1';
+
+      if (p === 'lootz-kit') {
+        svg.innerHTML = `
+          <rect width="32" height="32" fill="#121417"/>
+          <rect x="3" y="4" width="26" height="24" fill="none" stroke="#B88418" stroke-width="1"/>
+          <rect x="6" y="8" width="14" height="1" fill="#ECEFF4"/>
+          <rect x="6" y="11" width="18" height="1" fill="#8FBCBB"/>
+          <rect x="6" y="14" width="16" height="1" fill="#ECEFF4"/>
+          <rect x="6" y="17" width="20" height="1" fill="#EBCB8B"/>
+          <rect x="6" y="20" width="12" height="1" fill="#ECEFF4"/>
+          <rect x="6" y="23" width="15" height="1" fill="#BF616A"/>`;
+        return;
+      }
+      const frame = p === 'nounz-mesh' ? '#22C55E' : (p === 'nounz-ovk' ? '#C53D2F' : '#F4B728');
+      let slats = '';
+      if (p === 'nounz-venetian') {
+        for (const y of [12, 14, 16]) {
+          slats += `<rect x="9" y="${y}" width="5" height="1" fill="${frame}"/><rect x="19" y="${y}" width="5" height="1" fill="${frame}"/>`;
+        }
+      } else if (p === 'nounz-mesh') {
+        for (let y = 12; y <= 16; y++) {
+          for (let x = 9; x <= 13; x++) if ((x + y) % 2 === 0) slats += `<rect x="${x}" y="${y}" width="1" height="1" fill="${frame}"/>`;
+          for (let x = 19; x <= 23; x++) if ((x + y) % 2 === 0) slats += `<rect x="${x}" y="${y}" width="1" height="1" fill="${frame}"/>`;
+        }
+      } else {
+        for (const y of [12, 14, 16]) slats += `<rect x="9" y="${y}" width="5" height="1" fill="${frame}"/>`;
+        slats += `<rect x="20" y="13" width="3" height="3" fill="#F7F4ED"/><rect x="21" y="14" width="1" height="1" fill="#171614"/>`;
+      }
+      svg.innerHTML = `
+        <rect width="32" height="32" fill="#14161B"/>
+        <rect x="10" y="6" width="12" height="2" fill="#E8E2D5"/>
+        <rect x="8" y="8" width="16" height="14" fill="#F2EDE2"/>
+        <rect x="10" y="22" width="12" height="5" fill="#262934"/>
+        <rect x="5" y="13" width="3" height="1" fill="${frame}"/>
+        <rect x="15" y="13" width="3" height="1" fill="${frame}"/>
+        <rect x="8" y="11" width="7" height="7" fill="${frame}"/>
+        <rect x="18" y="11" width="7" height="7" fill="${frame}"/>
+        <rect x="9" y="12" width="5" height="5" fill="#0E1015"/>
+        <rect x="19" y="12" width="5" height="5" fill="#0E1015"/>
+        ${slats}`;
+    }
+
+    async function api(path, body) {
+      try {
+        const res = await fetch(path, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body || {})
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || JSON.stringify(data));
+        return data;
+      } catch (e) {
+        if (location.protocol === 'file:') return offlineFallback(path, body);
+        throw e;
+      }
+    }
+
+    // Fallback simulator only if opened directly via file:// without Axum server
+    function rndHex(n) { return Array.from({length:n}, () => Math.floor(Math.random()*256).toString(16).padStart(2,'0')).join(''); }
+    let offlineSlots = new Set();
+    function offlineFallback(path, b) {
+      if (path === '/api/demo/mint') {
+        const key = `${b.preset}:${b.token_index}`;
+        if (offlineSlots.has(key) || b.token_index > 100 || b.token_index < 1) throw new Error('governed mint rejected: duplicate AssetId, slot index, or cap');
+        offlineSlots.add(key);
+        return { session_id: 'local-1', asset_id: rndHex(32), asset_base: rndHex(32), commitment: rndHex(32), oob_uri: 'mem://' + rndHex(16), ovk: rndHex(32), nullifiers: [rndHex(32), rndHex(32), rndHex(32)], pcd_bytes: 6279, pcd_steps: 1 };
+      }
+      if (path === '/api/demo/transfer') return { prev_spent: true, new_commitment: rndHex(32), new_oob_uri: 'mem://' + rndHex(16), owner: 'bob' };
+      if (path === '/api/demo/decrypt') {
+        if (b.actor !== S.owner) throw new Error('ChaCha20Poly1305 key unwrap failed for revoked/non-owner key');
+        return { decrypted_summary: `Authentic Zyoza payload (${S.assetId.slice(0,12)}...)` };
+      }
+      if (path === '/api/demo/fold') return { step_count: S.hops + 1, last_step: b.step_kind, ipa_bytes: 2112, json_bytes: 6280, verify_ms: 16, acc_hex: rndHex(32) };
+      if (path === '/api/demo/list') return { listing_id: 1, prove_ms: 680, verify_ms: 18, proof_bytes: 5935, title: document.getElementById('insp-title').textContent };
+      if (path === '/api/demo/crystallize') return { zsa_txid: rndHex(32), asset_id: S.assetId, asset_base: S.assetBase, frost_signers: '1 & 3 (2-of-3 Pallas)', value: 1, finalized: true };
+    }
+
+    async function doMint() {
+      const preset = document.getElementById('preset').value;
+      const token_index = Number(document.getElementById('slot-idx').value);
+      try {
+        const r = await api('/api/demo/mint', { preset, token_index });
+        S.sessionId = r.session_id; S.assetId = r.asset_id; S.assetBase = r.asset_base; S.owner = 'alice'; S.hops = 1;
+        document.getElementById('out-1').style.display = 'block';
+        document.getElementById('out-1').innerHTML = `
+          <div><span>AssetId (ZIP 227):</span> ${r.asset_id}</div>
+          <div><span>AssetBase (Pallas):</span> ${r.asset_base}</div>
+          <div><span>Mint Nullifiers (3):</span> ${r.nullifiers[0].slice(0,18)}… (aid, idx #${token_index}, media)</div>
+          <div><span>OOB URI:</span> ${r.oob_uri}</div>`;
+        document.getElementById('badge-1').textContent = 'Anchored'; document.getElementById('badge-1').className = 'step-badge done';
+        document.getElementById('insp-stage').textContent = 'STAGE I: ORCHARD SEAL';
+        document.getElementById('insp-owner').textContent = 'Owner: Alice (Shielded)';
+        ['btn-dup','btn-xfer','btn-dec-alice','btn-dec-bob','btn-fold-royalty','btn-fold-ticket','btn-fold-upgrade','btn-toggle-ovk','btn-list','btn-crys'].forEach(id => document.getElementById(id).disabled = false);
+        ['badge-2','badge-3','badge-4','badge-6'].forEach(id => document.getElementById(id).textContent = 'Ready');
+        log(`<span class="ok">✓ Minted</span> slot #${token_index} → AssetId <code>${r.asset_id.slice(0,16)}…</code> (512B ZYOZ memo anchored)`);
+      } catch (e) {
+        log(`<span class="err">✗ Mint Rejected:</span> ${e.message}`);
+      }
+    }
+
+    async function doDuplicateAttack() {
+      const preset = document.getElementById('preset').value;
+      const token_index = Number(document.getElementById('slot-idx').value);
+      try {
+        await api('/api/demo/mint', { preset, token_index });
+      } catch (e) {
+        log(`<span class="ok">🛡 CollectionSpec Blocked Attack:</span> ${e.message}`);
+      }
+    }
+
+    async function doTransfer() {
+      try {
+        const r = await api('/api/demo/transfer', { session_id: S.sessionId });
+        S.owner = 'bob';
+        document.getElementById('out-2').style.display = 'block';
+        document.getElementById('out-2').innerHTML = `
+          <div><span>Prior Alice Seal:</span> SPENT (nullifier revealed)</div>
+          <div><span>New Bob Commitment:</span> ${r.new_commitment}</div>
+          <div><span>Re-Wrapped OOB:</span> ${r.new_oob_uri}</div>`;
+        document.getElementById('badge-2').textContent = 'Transferred'; document.getElementById('badge-2').className = 'step-badge done';
+        document.getElementById('insp-owner').textContent = 'Owner: Bob (Shielded)';
+        document.getElementById('btn-xfer').disabled = true;
+        log(`<span class="ok">✓ Transferred Alice → Bob:</span> Pallas ECDH DEK re-wrapped; Alice's seal retired.`);
+      } catch (e) { log(`<span class="err">✗ ${e.message}</span>`); }
+    }
+
+    async function tryDecrypt(actor) {
+      try {
+        const r = await api('/api/demo/decrypt', { session_id: S.sessionId, actor });
+        log(`<span class="ok">🔓 Decrypt (${actor}):</span> ${r.decrypted_summary}`);
+      } catch (e) {
+        log(`<span class="err">🔒 Decrypt Denied (${actor}):</span> ${e.message}`);
+      }
+    }
+
+    async function doFold(step_kind, profile_id) {
+      log(`⏳ Folding <code>${step_kind}</code> (${profile_id}) into Ragu PCD...`);
+      try {
+        const r = await api('/api/demo/fold', { session_id: S.sessionId, step_kind, profile_id });
+        S.hops = r.step_count;
+        document.getElementById('out-3').style.display = 'block';
+        document.getElementById('out-3').innerHTML = `
+          <div><span>Folded Lineage Depth:</span> ${r.step_count} hops (latest: ${r.last_step} / ${profile_id})</div>
+          <div><span>Accumulator:</span> ${r.acc_hex}</div>
+          <div><span>Raw IPA Proof Size:</span> ${r.ipa_bytes} B (constant O(1) size! Verified in ${r.verify_ms} ms)</div>`;
+        document.getElementById('badge-3').textContent = `${r.step_count} Hops Folded`; document.getElementById('badge-3').className = 'step-badge done';
+        log(`<span class="ok">✓ Ragu PCD Fold #${r.step_count}:</span> ${step_kind} verified in ${r.verify_ms}ms (${r.ipa_bytes}B constant IPA proof)`);
+      } catch (e) { log(`<span class="err">✗ ${e.message}</span>`); }
+    }
+
+    function toggleOvkPreview() {
+      S.ovkOpen = !S.ovkOpen;
+      document.getElementById('out-4').style.display = 'block';
+      if (S.ovkOpen) {
+        document.getElementById('out-4').innerHTML = `<div><span>Preview (With OVK):</span> <strong>${document.getElementById('insp-title').textContent}</strong> — Traits &amp; provenance selectively disclosed.</div>`;
+        log(`<span class="hl">👁 OVK Applied:</span> Item metadata selectively revealed without exposing wallet FVK.`);
+      } else {
+        document.getElementById('out-4').innerHTML = `<div><span>Preview (No OVK):</span> <strong>Shielded Zyoza NFT</strong> — "{}" (opaque on-chain)</div>`;
+        log(`<span>🙈 OVK Withheld:</span> Public observers see only opaque ciphertext.`);
+      }
+    }
+
+    async function doListGallery() {
+      const reserve_zatoshis = Number(document.getElementById('reserve-zats').value);
+      log(`⏳ Generating Halo2 Pasta ZK Ownership Proof (k=6)...`);
+      try {
+        const r = await api('/api/demo/list', { session_id: S.sessionId, reserve_zatoshis });
+        S.listingId = r.listing_id;
+        document.getElementById('out-4').style.display = 'block';
+        document.getElementById('out-4').innerHTML = `
+          <div><span>Gallery Listing:</span> #${r.listing_id} (${r.title}) — <strong>ZK Ownership Verified ✓</strong></div>
+          <div><span>Halo2 Pasta IPA:</span> ${r.proof_bytes} B | prove=${r.prove_ms}ms | verify=${r.verify_ms}ms</div>`;
+        document.getElementById('badge-4').textContent = 'Listed #' + r.listing_id; document.getElementById('badge-4').className = 'step-badge done';
+        document.getElementById('badge-5').textContent = 'Open';
+        document.getElementById('btn-bid').disabled = false;
+        document.getElementById('btn-clear').disabled = false;
+        log(`<span class="ok">✓ Listed #${r.listing_id}:</span> Halo2 proof verified in ${r.verify_ms}ms.`);
+      } catch (e) { log(`<span class="err">✗ ${e.message}</span>`); }
+    }
+
+    async function doBid() {
+      const bidder_id = document.getElementById('bidder-name').value || 'carol';
+      const bid_zatoshis = Number(document.getElementById('bid-zats').value);
+      try {
+        if (location.protocol !== 'file:') {
+          const res = await fetch(`/api/listings/${S.listingId}/bids`, {
+            method: 'POST', headers: {'content-type': 'application/json'},
+            body: JSON.stringify({ bidder_id, shielded_zec_commitment: Array(32).fill(9), bid_zatoshis })
+          });
+          if (!res.ok) throw new Error(await res.text());
+        }
+        document.getElementById('out-5').style.display = 'block';
+        document.getElementById('out-5').innerHTML = `<div><span>Latest Sealed Bid:</span> ${bidder_id} committed ${bid_zatoshis.toLocaleString()} zatoshis (shielded)</div>`;
+        log(`<span class="ok">✓ Sealed Bid:</span> ${bidder_id} (${bid_zatoshis.toLocaleString()} zats) recorded.`);
+      } catch (e) { log(`<span class="err">✗ ${e.message}</span>`); }
+    }
+
+    async function doClear() {
+      try {
+        let r;
+        if (location.protocol === 'file:') {
+          r = { winning_bidder: document.getElementById('bidder-name').value, clearing_price_zatoshis: Number(document.getElementById('bid-zats').value) };
+        } else {
+          const res = await fetch(`/api/listings/${S.listingId}/clear`, { method: 'POST' });
+          if (!res.ok) throw new Error(await res.text());
+          r = await res.json();
+        }
+        S.owner = r.winning_bidder;
+        document.getElementById('out-5').innerHTML = `<div><span>Cleared Winner:</span> <strong>${r.winning_bidder}</strong> at ${r.clearing_price_zatoshis.toLocaleString()} zatoshis</div>`;
+        document.getElementById('badge-5').textContent = 'Cleared'; document.getElementById('badge-5').className = 'step-badge done';
+        document.getElementById('insp-owner').textContent = `Owner: ${r.winning_bidder} (Shielded)`;
+        log(`<span class="ok">✓ Auction Cleared:</span> Won by ${r.winning_bidder} (${r.clearing_price_zatoshis.toLocaleString()} zats).`);
+      } catch (e) { log(`<span class="err">✗ ${e.message}</span>`); }
+    }
+
+    async function doCrystallize() {
+      log(`⏳ Proving Halo2 burn migration + signing 2-of-3 Pallas FROST ZSA issuance...`);
+      try {
+        const r = await api('/api/demo/crystallize', { session_id: S.sessionId });
+        document.getElementById('out-6').style.display = 'block';
+        document.getElementById('out-6').innerHTML = `
+          <div><span>Stage II Settlement:</span> Native OrchardZSA Note (value = ${r.value}, finalized = ${r.finalized})</div>
+          <div><span>Preserved AssetId:</span> ${r.asset_id}</div>
+          <div><span>FROST Threshold Auth:</span> ${r.frost_signers}</div>`;
+        document.getElementById('badge-6').textContent = 'Crystallized ZSA'; document.getElementById('badge-6').className = 'step-badge done';
+        document.getElementById('insp-stage').textContent = 'STAGE II: NATIVE ZSA';
+        document.getElementById('btn-crys').disabled = true;
+        log(`<span class="ok">✨ Crystallized to Native ZSA:</span> Stage I Orchard seal burned; identical AssetId live on OrchardZSA.`);
+      } catch (e) { log(`<span class="err">✗ ${e.message}</span>`); }
+    }
+
+    renderPresetArt();
+  </script>
+</body>
+</html>

@@ -29,5 +29,6 @@ cargo run -p zyoza-gallery-demo
 ```
 
 ## Documentation
+* [Whitepaper](docs/WHITEPAPER.md)
 * [Protocol Specification](docs/SPEC.md)
 * [Security Model, Constraints & Benchmarks](docs/SECURITY_AND_BENCHMARKS.md)

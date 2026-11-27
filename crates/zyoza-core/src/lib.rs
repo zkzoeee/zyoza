@@ -13,10 +13,11 @@ pub use disclosure::{DisclosureBundle, ObjectViewingKey};
 pub use error::ZyozaError;
 pub use traits::{AssetProfile, ProofEngine, SettlementAdapter};
 pub use types::{
-    ZyozaEnvelope, OrchardMemoSeal, OwnershipProofRequest, OwnershipVerifyRequest, ProfileId,
-    ProfilePreview, ProofBytes, SettlementReceipt, MAX_OOB_URI_LEN, ORCHARD_MEMO_LEN,
+    OrchardMemoSeal, OwnershipProofRequest, OwnershipVerifyRequest, ProfileId, ProfilePreview,
+    ProofBytes, SettlementReceipt, ZyozaEnvelope, MAX_OOB_URI_LEN, ORCHARD_MEMO_LEN,
     PROTOCOL_VERSION, SEAL_MAGIC,
 };
+pub use types::ZyozaEnvelope as ZyEnvelopeAlias;
 
 #[cfg(test)]
 mod tests {
