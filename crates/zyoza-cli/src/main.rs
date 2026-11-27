@@ -7,7 +7,7 @@ use zyoza_core::{
 use zyoza_oob::{LocalFsStorage, OobEnvelope, OobKeypair, OobStorage};
 use zyoza_profile_nft::{CollectionPolicy, NftProfile, NftState};
 use zyoza_profile_ticket::{TicketProfile, TicketState, TicketTransitionWitness};
-use zyoza_proofs::Halo2ProofEngine;
+use zyoza_proofs::RaguPcdEngine;
 use zyoza_sdk::ZyozaNftClient;
 use zyoza_settlement::OrchardSealAdapter;
 use rand::rngs::StdRng;
@@ -18,7 +18,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 #[derive(Parser)]
-#[command(name = "zyoza", version, about = "🥟 Zyoza — Shielded State Objects on Zcash")]
+#[command(name = "zyoza", version, about = "Zyoza — Proof-Carrying Shielded State Objects on Zcash")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -104,7 +104,7 @@ enum NftCommands {
         #[arg(long)]
         ovk: Option<String>,
     },
-    /// Generate a Halo2 Pasta ZK ownership proof for an NFT.
+    /// Generate a Ragu Pasta Poseidon-Merkle ZK ownership proof for an NFT.
     ProveOwnership {
         #[arg(long, default_value = ".zyoza")]
         dir: PathBuf,
@@ -119,7 +119,7 @@ enum NftCommands {
         #[arg(long)]
         out: PathBuf,
     },
-    /// Verify a Halo2 Pasta ZK ownership proof.
+    /// Verify a Ragu Pasta Poseidon-Merkle ZK ownership proof.
     VerifyProof {
         #[arg(long)]
         collection_root: String,
@@ -190,7 +190,7 @@ fn main() -> Result<()> {
                 let seed = parse_32(&owner_seed)?;
                 let owner_keys = OobKeypair::from_seed_bytes(&seed);
                 let storage = LocalFsStorage::new(dir.join("oob"))?;
-                let client = ZyozaNftClient::new(storage, OrchardSealAdapter::new(), Halo2ProofEngine);
+                let client = ZyozaNftClient::new(storage, OrchardSealAdapter::new(), RaguPcdEngine);
                 let mut rng = StdRng::seed_from_u64(1);
 
                 let desc = AssetDesc {
@@ -269,7 +269,7 @@ fn main() -> Result<()> {
                 .to_bytes()?;
                 settlement.anchor_mint(&entry.state.asset_id, prev_commit, &dummy_memo)?;
 
-                let client = ZyozaNftClient::new(storage, settlement, Halo2ProofEngine);
+                let client = ZyozaNftClient::new(storage, settlement, RaguPcdEngine);
                 let mut rng = StdRng::seed_from_u64(2);
                 let out = client.transfer_nft(
                     &mut rng,
@@ -341,7 +341,7 @@ fn main() -> Result<()> {
                 } else {
                     parse_32(&collection_root)?
                 };
-                let proof = Halo2ProofEngine.prove_ownership(&OwnershipProofRequest {
+                let proof = RaguPcdEngine.prove_ownership(&OwnershipProofRequest {
                     asset_id: asset,
                     collection_root: root_bytes,
                     merkle_siblings: tree.path(0),
@@ -350,7 +350,7 @@ fn main() -> Result<()> {
                 })?;
                 println!("Collection Merkle Root: {}", hex::encode(root_bytes));
                 fs::write(&out, &proof)?;
-                println!("Wrote Halo2 ownership proof ({} bytes) to {}", proof.len(), out.display());
+                println!("Wrote Ragu ownership proof ({} bytes) to {}", proof.len(), out.display());
             }
             NftCommands::VerifyProof {
                 collection_root,
@@ -358,7 +358,7 @@ fn main() -> Result<()> {
                 proof_file,
             } => {
                 let proof = fs::read(&proof_file)?;
-                let ok = Halo2ProofEngine.verify_ownership(
+                let ok = RaguPcdEngine.verify_ownership(
                     &OwnershipVerifyRequest {
                         collection_root: parse_32(&collection_root)?,
                         challenge: parse_32(&challenge)?,

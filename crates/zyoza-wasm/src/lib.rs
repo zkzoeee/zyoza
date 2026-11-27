@@ -1,4 +1,4 @@
-//! Browser/WASM bindings for Zyoza cross-profile previews, memo parsing, and Halo2 verification.
+//! Browser/WASM bindings for Zyoza cross-profile previews, memo parsing, and Ragu verification.
 
 use zyoza_core::{AssetId, ObjectViewingKey, ORCHARD_MEMO_LEN};
 use zyoza_sdk::portable::{
@@ -36,7 +36,7 @@ pub fn parse_memo_seal(memo_bytes: &[u8]) -> Result<String, JsValue> {
     parse_memo_seal_json(&arr).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
-/// Verifies a Halo2 Pasta ownership proof from hex-encoded public inputs.
+/// Verifies a Ragu Pasta Poseidon-Merkle ownership proof from hex-encoded public inputs.
 #[wasm_bindgen]
 pub fn verify_ownership_proof(
     collection_root_hex: &str,

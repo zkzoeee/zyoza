@@ -242,8 +242,8 @@
             <span class="step-idx">01 · IDENTITY &amp; SCARCITY</span>
             <span class="status-pill st-impl">Implemented</span>
           </div>
-          <h3>ZIP 227 AssetDigest &amp; Halo2 Supply Caps</h3>
-          <p>Derives canonical 64-byte <code>BLAKE2b-512("ZSA-Asset-Digest")</code> and Pallas <code>GroupHash("z.cash:OrchardZSA")</code> from genesis. Deterministic mint nullifiers (<code>NF_aid</code>, <code>NF_idx</code>, <code>NF_med</code>) + Halo2 16-bit binary range proofs enforce capped drops.</p>
+          <h3>ZIP 227 AssetDigest &amp; Ragu Supply Caps</h3>
+          <p>Derives canonical 64-byte <code>BLAKE2b-512("ZSA-Asset-Digest")</code> and Pallas <code>GroupHash("z.cash:OrchardZSA")</code> from genesis. Deterministic mint nullifiers (<code>NF_aid</code>, <code>NF_idx</code>, <code>NF_med</code>) + Ragu 16-bit range proofs (<code>enforce_le::&lt;16&gt;</code>) enforce capped drops.</p>
         </div>
         <div class="cell">
           <div class="cell-top">
@@ -351,7 +351,7 @@
         <span class="section-note">Rust 1.97+ · Offline Reproducible Tests</span>
       </div>
       <div class="quickstart">
-        <pre class="cmd"># Verify ZIP 227/302 vectors, Ragu PCD, Halo2 &amp; Studio API
+        <pre class="cmd"># Verify ZIP 227/302 vectors, 10-circuit Ragu PCD/ZK suite &amp; Studio API
 cargo test --workspace --offline
 
 # Launch Zyoza Studio &amp; Markdown docs on http://127.0.0.1:8080
@@ -359,7 +359,7 @@ cargo run -p zyoza-gallery-demo</pre>
         <div class="doc-links">
           <a href="/whitepaper"><span><strong>Whitepaper (v2.0)</strong> — Enforcement, Tachyon &amp; Trust Model</span><span>→</span></a>
           <a href="/spec"><span><strong>Protocol Spec</strong> — ZIP 227 Vectors &amp; 512B ZIP 302 Layout</span><span>→</span></a>
-          <a href="/security"><span><strong>Security &amp; Benchmarks</strong> — Formal Ragu/Halo2 Gates &amp; M2 Pro Timings</span><span>→</span></a>
+          <a href="/security"><span><strong>Security &amp; Benchmarks</strong> — Formal Ragu Gates &amp; M2 Pro Timings</span><span>→</span></a>
           <a href="/demo"><span><strong>Zyoza Studio</strong> — Live 6-Step Interactive Workbench</span><span>→</span></a>
         </div>
       </div>

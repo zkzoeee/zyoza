@@ -22,7 +22,7 @@ rust-version = "1.97"
 license = "MIT OR Apache-2.0"
 version = "0.1.0"
 
-# Optimize Ragu / Halo2 / Pasta generic circuits in dev & test runs too.
+# Optimize Ragu / Pasta generic circuits in dev & test runs too.
 [profile.dev]
 opt-level = 2
 
@@ -38,7 +38,6 @@ chacha20poly1305 = "0.10"
 clap = { version = "4.5", features = ["derive"] }
 ff = "0.14"
 group = "0.14"
-halo2_proofs = "0.4"
 hex = "0.4"
 hkdf = "0.12"
 orchard = { version = "0.16", default-features = false, features = ["std"] }

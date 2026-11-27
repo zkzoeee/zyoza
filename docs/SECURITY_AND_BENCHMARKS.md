@@ -8,7 +8,7 @@ All measurements below were collected directly from `cargo test --workspace --of
 | :--- | :--- | :--- | :--- | :--- |
 | **Ragu Recursive PCD Fold (`fuse` + `compress`)** | `tachyon-zcash/ragu` (`WalletRank = R<13>`, Pasta) | `7,409 ms / hop` | `732 ms` ($O(1)$) | **`7,168 B`** (`CompressedProof<Pasta>`) |
 | **Ragu Poseidon-Merkle Ownership Proof** | `OwnershipMerkleCircuit` (`MERKLE_DEPTH = 4`, Pasta) | `14,447 ms` *(incl. table init)* | `466 ms` | **`7,168 B`** (`CompressedProof<Pasta>`) |
-| **Halo2 Supply-Cap Range Proof** | `IssuanceCapCircuit` (`k = 6`, 16-bit binary range) | `< 120 ms` | `< 10 ms` | `~2.1 KB` Halo2 IPA |
+| **Ragu Supply-Cap / Trait / Migration Proof** | `IssuanceCapCircuit` / `AttributeCircuit` / `MigrationCircuit` (`WalletRank`) | `~7.0 s` *(warm thread)* | `~460 ms` | **`7,168 B`** (`CompressedProof<Pasta>`) |
 | **Tachyon 10,000-Mint Epoch Aggregation** | `TachyonAdapter` (simulated 14-level Merkle epoch) | `< 50 ms` | `< 1 ms` (14 hashes) | `32 B` `Tachystamp` root |
 
 *Note on first-call initialization:* `ragu::Application` initializes its baked Pasta synthesis tables per worker thread on first touch (`~7 s` on Apple M2 Pro); subsequent `fuse` + `compress` folds on warm threads run in `~7.4 s` and always compress to **`7,168 bytes`** (`CompressedProof::<Pasta>::encoded_len::<WalletRank>()`).
@@ -21,7 +21,7 @@ All measurements below were collected directly from `cargo test --workspace --of
    * *Mechanism:* Each transition retires the prior note's commitment/nullifier and binds the new commitment in Ragu's `LineageHeader` (`left[SLOT_LATEST] == witness.prev_commit_fp`).
    * *Prototype status:* Simulated in memory by `OrchardSealAdapter`, `OrchardZsaAdapter`, and `TachyonAdapter`. On live Zcash, Orchard consensus enforces single-spend nullifiers while buyers verify the current note opening + compressed Ragu lineage proof prior to payment.
 2. **Duplicate Collection Slot / Media Re-Minting (`CollectionSpec`)**
-   * *Mechanism:* Deterministic domain-separated nullifiers (`NF_aid`, `NF_idx`, `NF_med`) collide if an issuer attempts to mint the same slot or SHA-256 media hash twice, paired with Halo2 16-bit range proofs ($1 \le \text{idx} \le \text{cap}$).
+   * *Mechanism:* Deterministic domain-separated nullifiers (`NF_aid`, `NF_idx`, `NF_med`) collide if an issuer attempts to mint the same slot or SHA-256 media hash twice, paired with Ragu 16-bit range proofs (`IssuanceCapCircuit`, $1 \le \text{idx} \le \text{cap}$).
    * *Enforcement boundary:* In Stage I (pre-ZSA), `NF_*` must be published to a public bulletin/indexer stream so buyers can verify global slot uniqueness; in Stage II (ZIP 227), supply caps and `finalize = true` are enforced directly by Zcash consensus.
 3. **Metadata & Media Leakage**
    * *Mechanism:* Payloads travel out-of-band (`zyoza-oob`) encrypted under `ChaCha20Poly1305` (`AAD = AssetId`) with ephemeral Pallas ECDH (`ecdh-pallas-hkdf-sha256`). Stage I memos start with ZIP 302 `0xFF` (`[0xFF, 'Z', 'Y', 'O', 'Z']`) so wallets never parse them as UTF-8 text.
@@ -54,5 +54,7 @@ All measurements below were collected directly from `cargo test --workspace --of
   $$\text{OwnershipHeader} = \text{Poseidon}(\text{cur}_4,\; \text{chal})$$
   Verifier recomputes $\text{Poseidon}(\text{collection\_root}, \text{chal})$ and calls `Application::verify_compressed`.
 
-### 3.3 Halo2 Supply-Cap Range Circuit (`IssuanceCapCircuit`, `k = 6`)
-* Decomposes $d_{\text{lo}} = \text{idx} - 1$ and $d_{\text{hi}} = \text{cap} - \text{idx}$ into 16 boolean wires $b_j \in \{0,1\}$ ($b_j \cdot (1 - b_j) = 0$) and enforces $\sum_{j=0}^{15} b_j \cdot 2^j = d$, proving $1 \le \text{idx} \le \text{cap} < 2^{16}$ in zero knowledge.
+### 3.3 Ragu Supply-Cap, Attribute & Migration Circuits (`Index 7..9`)
+* **`IssuanceCapCircuit` (`Index 7`, `CapHeader`):** Allocates $d_{\text{lo}} = \text{idx} - 1$ and $d_{\text{hi}} = \text{cap} - \text{idx}$, calls Ragu's `Element::enforce_le::<16>(u16::MAX)` on both so neither can wrap modulo $p$, and outputs $\text{CapHeader} = d_{\text{lo}} + 1 + d_{\text{hi}}$, proving $1 \le \text{idx} \le \text{cap} \le 65,535$.
+* **`AttributeCircuit` (`Index 8`, `AttributeHeader`):** Binds $\text{owner\_leaf} = \text{Poseidon}(\text{asset}, \text{Poseidon}(\text{sec}))$ to $(\text{trait\_fp}, \text{chal})$ via $\text{Poseidon}(\text{Poseidon}(\text{owner\_leaf}, \text{trait\_fp}), \text{chal})$.
+* **`MigrationCircuit` (`Index 9`, `MigrationHeader`):** Enforces $\text{sec} \neq 0$ via `Element::enforce_nonzero`, derives $\text{burn\_nf} = \text{Poseidon}(\text{asset}, \text{sec})$, and outputs $\text{Poseidon}(\text{Poseidon}(\text{asset}, \text{cmt}_{\text{p1}}), \text{burn\_nf})$.

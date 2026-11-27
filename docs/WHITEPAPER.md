@@ -2,7 +2,7 @@
 
 **Author:** `zkzoeee`  
 **Date:** November 2026 · **Version:** 2.0  
-**Status:** *Research prototype — real `tachyon-zcash/ragu` recursive PCD (`7,168 B` constant `CompressedProof<Pasta>`), Halo2 IPA, Pallas ECDH, and ChaCha20-Poly1305 cryptography running over a simulated in-memory settlement ledger. Not audited.*
+**Status:** *Research prototype — 100% unified `tachyon-zcash/ragu` non-uniform recursive PCD & ZK suite (`7,168 B` constant `CompressedProof<Pasta>` across 10 registered `Step<Pasta>` circuits), Pallas ECDH, and ChaCha20-Poly1305 cryptography running over a simulated in-memory settlement ledger. Not audited.*
 
 ---
 
@@ -19,9 +19,9 @@ To distinguish implemented cryptography from simulated ledger components and fut
 
 | Component | Status | What Runs in the Reference Code |
 | :--- | :--- | :--- |
-| **Ragu Non-Uniform Recursive PCD** (`zyoza-proofs`) | **Implemented** | Real `tachyon-zcash/ragu` (`Application<Pasta, WalletRank, 5>`) with 7 registered `Step<Pasta>` circuits (`seed`, `fuse`, `compress`, `verify_compressed`) and in-circuit state contiguity. |
-| **Poseidon-Merkle Ownership Proofs** (`zyoza-proofs`) | **Implemented** | Ragu `OwnershipMerkleCircuit` proving depth-4 Poseidon Merkle inclusion + owner secret preimage + fresh verifier challenge. |
-| **Supply-Cap Range Proof** (`zyoza-proofs`) | **Implemented** | Halo2 (`k = 6`, Pasta) 16-bit binary decomposition proving $1 \le \text{token\_index} \le \text{max\_supply}$. |
+| **Ragu Non-Uniform Recursive PCD** (`zyoza-proofs`) | **Implemented** | Unified `tachyon-zcash/ragu` (`Application<Pasta, WalletRank, 5>`) with 10 registered `Step<Pasta>` circuits (`seed`, `fuse`, `compress`, `verify_compressed`) and in-circuit state contiguity. |
+| **Poseidon-Merkle Ownership & Traits** (`zyoza-proofs`) | **Implemented** | Ragu `OwnershipMerkleCircuit` (depth-4 Poseidon Merkle inclusion + challenge) and `AttributeCircuit` (selective trait binding). |
+| **Supply-Cap & ZSA Migration Circuits** (`zyoza-proofs`) | **Implemented** | Ragu `IssuanceCapCircuit` (`Element::enforce_le::<16>` proving $1 \le \text{token\_index} \le \text{max\_supply}$) and `MigrationCircuit` (Stage I -> Stage II burn nullifier). |
 | **ZIP 302 Binary Memo Codec & ZIP 227 Digest** (`zyoza-core`) | **Implemented** | 512-byte `[0xFF, 'Z', 'Y', 'O', 'Z', ...]` codec, `BLAKE2b-512("ZSA-Asset-Digest")`, Pallas `GroupHash("z.cash:OrchardZSA")`, and `CollectionSpec` nullifiers. |
 | **Out-of-Band AEAD & Pallas ECDH Re-Wrap** (`zyoza-oob`) | **Implemented** | `ChaCha20Poly1305` payload encryption + ephemeral Pallas ECDH + HKDF-SHA256 32-byte DEK re-wrapping + seed-derived backups. |
 | **Commit-Reveal Sealed Bids** (`apps/gallery-demo`) | **Implemented** | `BLAKE2b-256` salted bid commitments; bid amounts remain hidden until the reveal phase. |
@@ -87,7 +87,7 @@ Zyoza integrates **`tachyon-zcash/ragu`** (`Application<'static, Pasta, WalletRa
    * `TransferCircuit` (`Index 2`): Enforces in-circuit asset invariance (`left.asset == witness.asset`) and state contiguity (`left.latest == witness.prev_commit`) before fusing `Pcd<Pasta, WalletRank, LineageHeader>`.
    * `RoyaltyCircuit` (`Index 3`): Allocates `royalty_required` and `royalty_paid` via `ragu::primitives::Boolean`, enforces `royalty_required && !royalty_paid == 0` in-circuit, and fuses the prior lineage proof.
    * `TicketCheckInCircuit` (`Index 4`) & `UpgradeCircuit` (`Index 5`): Compute in-circuit Poseidon event check-in nullifiers (`TKT1`) and item upgrades (`GAM1`), enabling cross-profile folding on a single asset.
-2. **Poseidon-Merkle ZK Ownership (`OwnershipMerkleCircuit`, `Index 6`):** Proves in zero knowledge that `leaf = Poseidon(asset_id, Poseidon(secret))` resolves via a depth-4 Merkle path to a public `collection_root`, bound to a fresh verifier `challenge` (`OwnershipHeader = Poseidon(root, challenge)`). Unlisted assets, wrong secrets, or replayed challenges fail `verify_compressed`.
+2. **Standalone Ragu Circuits (`Index 6..9`):** Using the same `Application<Pasta, WalletRank, 5>` with distinct `Header` suffixes (`Suffix(1..4)`), Zyoza proves depth-4 Poseidon Merkle collection ownership (`OwnershipMerkleCircuit`), 16-bit supply-cap bounds via `Element::enforce_le::<16>` (`IssuanceCapCircuit`), selective trait commitments (`AttributeCircuit`), and Stage I $\to$ Stage II ZSA burn-nullifier migrations (`MigrationCircuit`). Unlisted assets, out-of-range slots, wrong secrets, or replayed challenges fail `verify_compressed`.
 
 ---
 

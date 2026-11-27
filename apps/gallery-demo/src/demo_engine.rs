@@ -14,8 +14,7 @@ use zyoza_core::{
 use zyoza_oob::{InMemoryStorage, OobEnvelope, OobKeypair, OobStorage};
 use zyoza_profile_nft::{CollectionPolicy, MediaManifest, NftProfile, NftState, ProvenanceEvent};
 use zyoza_proofs::{
-    CollectionMerkleTree, Halo2ProofEngine, RaguPcdEngine, RaguPcdProof, RaguStepKind,
-    RaguStepWitness,
+    CollectionMerkleTree, RaguPcdEngine, RaguPcdProof, RaguStepKind, RaguStepWitness,
 };
 use zyoza_settlement::{
     aggregate_signatures, keygen_dealer, round1_commit, round2_sign, verify_frost_signature,
@@ -610,12 +609,12 @@ impl DemoWorkbench {
             bail!("already crystallized into Stage II ZSA");
         }
 
-        let mig_proof = Halo2ProofEngine.prove_migration(
+        let mig_proof = RaguPcdEngine.prove_migration(
             &sess.asset_id,
             sess.commitment,
             sess.owner.as_bytes(),
         )?;
-        if !Halo2ProofEngine.verify_migration(&sess.asset_id, sess.commitment, &mig_proof)? {
+        if !RaguPcdEngine.verify_migration(&sess.asset_id, sess.commitment, &mig_proof)? {
             bail!("migration proof invalid");
         }
 

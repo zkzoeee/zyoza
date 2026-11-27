@@ -274,8 +274,8 @@
             <span id="badge-6" class="step-badge">Locked</span>
           </div>
         </div>
-        <h2>1:1 Upgrade via Halo2 Migration Proof + 2-of-3 Pallas Schnorr</h2>
-        <p class="desc">Proves Stage I migration, retires the Stage I seal, co-signs issuance with a <code>2-of-3</code> Pallas threshold committee (trusted-dealer setup), and mints a simulated Stage II <code>ZsaNote</code> (<code>value = 1</code>, finalized supply), permanently locking Stage I actions.</p>
+        <h2>1:1 Upgrade via Ragu Migration Proof + 2-of-3 Pallas Schnorr</h2>
+        <p class="desc">Proves Stage I migration via Ragu <code>MigrationCircuit</code>, retires the Stage I seal, co-signs issuance with a <code>2-of-3</code> Pallas threshold committee (trusted-dealer setup), and mints a simulated Stage II <code>ZsaNote</code> (<code>value = 1</code>, finalized supply), permanently locking Stage I actions.</p>
         <div class="row">
           <button id="btn-crys" onclick="doCrystallize()" disabled>Burn Stage I Seal &amp; Crystallize ZSA</button>
         </div>
@@ -467,7 +467,7 @@
 
     async function api(path, body) {
       if (location.protocol === 'file:') {
-        throw new Error('Opened as local file:// — start the Rust server (`cargo run -p zyoza-gallery-demo`) to execute real Ragu & Halo2 proofs.');
+        throw new Error('Opened as local file:// — start the Rust server (`cargo run -p zyoza-gallery-demo`) to execute real Ragu proofs.');
       }
       let res;
       try {
@@ -754,7 +754,7 @@
     }
 
     async function doCrystallize() {
-      appendLog('… Crystallizing:', 'Proving Halo2 migration + signing 2-of-3 Pallas Schnorr ZSA issuance...', 'hl');
+      appendLog('… Crystallizing:', 'Proving Ragu MigrationCircuit + signing 2-of-3 Pallas Schnorr ZSA issuance...', 'hl');
       try {
         const r = await api('/api/demo/crystallize', { session_id: S.sessionId });
         S.crystallized = true;

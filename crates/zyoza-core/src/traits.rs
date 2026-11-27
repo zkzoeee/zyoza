@@ -50,7 +50,7 @@ pub trait SettlementAdapter: Send + Sync {
     fn verify_seal(&self, receipt: &SettlementReceipt) -> Result<bool, ZyozaError>;
 }
 
-/// Swappable zero-knowledge proof backend (Halo2 today, Ragu non-uniform PCD later).
+/// Zero-knowledge proof backend (implemented by `RaguPcdEngine` over Pasta).
 pub trait ProofEngine: Send + Sync {
     /// Generates a zero-knowledge proof of unspent object ownership.
     fn prove_ownership(&self, req: &OwnershipProofRequest) -> Result<ProofBytes, ZyozaError>;

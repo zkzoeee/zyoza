@@ -13,7 +13,7 @@ use zyoza_profile_gaming::GameProfile;
 use zyoza_profile_nft::NftProfile;
 use zyoza_profile_rwa::RwaProfile;
 use zyoza_profile_ticket::TicketProfile;
-use zyoza_proofs::Halo2ProofEngine;
+use zyoza_proofs::RaguPcdEngine;
 use serde::Serialize;
 
 #[derive(Serialize)]
@@ -65,7 +65,7 @@ pub fn parse_memo_seal_json(memo_bytes: &[u8; ORCHARD_MEMO_LEN]) -> Result<Strin
         .map_err(|e| ZyozaError::InvalidEncoding(format!("seal json: {e}")))
 }
 
-/// Verifies a Halo2 Pasta ownership proof from hex-encoded public inputs (WASM/FFI friendly).
+/// Verifies a Ragu Pasta Poseidon-Merkle ownership proof from hex-encoded public inputs (WASM/FFI friendly).
 pub fn verify_ownership_proof_hex(
     collection_root_hex: &str,
     challenge_hex: &str,
@@ -73,7 +73,7 @@ pub fn verify_ownership_proof_hex(
 ) -> Result<bool, ZyozaError> {
     let collection_root = parse_hex_32(collection_root_hex)?;
     let challenge = parse_hex_32(challenge_hex)?;
-    Halo2ProofEngine.verify_ownership(
+    RaguPcdEngine.verify_ownership(
         &OwnershipVerifyRequest {
             collection_root,
             challenge,
@@ -105,7 +105,7 @@ mod tests {
     use std::collections::BTreeMap;
 
     #[test]
-    fn portable_sdk_dispatches_all_three_profiles_and_verifies_halo2() {
+    fn portable_sdk_dispatches_all_five_profiles_and_verifies_ragu() {
         let asset_id = AssetId::derive(&[0x01; 32], b"zyoza:multi:1");
         let ovk = ObjectViewingKey::derive(asset_id, &[0x42; 32]);
 
@@ -192,7 +192,7 @@ mod tests {
         let tree = zyoza_proofs::CollectionMerkleTree::from_holdings(&[(asset_id, b"secret")]);
         let root = tree.root();
         let chal = [0xBB; 32];
-        let proof = Halo2ProofEngine
+        let proof = RaguPcdEngine
             .prove_ownership(&OwnershipProofRequest {
                 asset_id,
                 collection_root: root,

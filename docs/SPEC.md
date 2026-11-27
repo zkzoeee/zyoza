@@ -2,7 +2,7 @@
 
 Zyoza is a modular **Shielded State Object** protocol on Zcash—launching first for **NFTs (`NFT1`)**, extensible to **ticketing (`TKT1`)**, **soulbound credentials (`CRD1`)**, **cypherpunk gaming items (`GAM1`)**, and **tokenized real-world deeds (`RWA1`)**.
 
-> **Implementation Boundary:** Cryptographic primitives (`AssetDigest`/`AssetBase`, 512-byte ZIP 302 codec, `ChaCha20Poly1305` + Pallas ECDH key wrapping, `tachyon-zcash/ragu` recursive PCD, Halo2 range/migration proofs, and 2-of-3 Pallas Schnorr threshold signing) are implemented and tested in Rust; Orchard, ZSA, and Tachyon ledger adapters currently execute in memory (`Simulated`).
+> **Implementation Boundary:** Cryptographic primitives (`AssetDigest`/`AssetBase`, 512-byte ZIP 302 codec, `ChaCha20Poly1305` + Pallas ECDH key wrapping, unified 10-circuit `tachyon-zcash/ragu` PCD & ZK proofs, and 2-of-3 Pallas Schnorr threshold signing) are implemented and tested in Rust; Orchard, ZSA, and Tachyon ledger adapters currently execute in memory (`Simulated`).
 
 ---
 
@@ -75,7 +75,7 @@ Transfers call `OobEnvelope::rewrap_for_recipient`, unwrapping only the 32-byte 
 
 1. **`AssetProfile`** — Vertical-specific schema, transition validation, and `ObjectViewingKey` selective-disclosure preview (`NFT1`, `TKT1`, `CRD1`, `GAM1`, `RWA1`).
 2. **`SettlementAdapter`** — Swappable anchor backend (`OrchardSealAdapter` -> `OrchardZsaAdapter` -> `TachyonAdapter`).
-3. **`ProofEngine`** — Implemented by both `RaguPcdEngine` (`tachyon-zcash/ragu`, `Application<Pasta, WalletRank, 5>`, `7,168 B` `CompressedProof<Pasta>`) and `Halo2ProofEngine` (`halo2_proofs` IPA `k = 6`).
+3. **`ProofEngine`** — Implemented purely via `RaguPcdEngine` (`tachyon-zcash/ragu`, `Application<Pasta, WalletRank, 5>`, 10 registered `Step<Pasta>` subcircuits, `7,168 B` constant `CompressedProof<Pasta>`).
 
 ---
 
