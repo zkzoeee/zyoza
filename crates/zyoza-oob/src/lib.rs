@@ -2,12 +2,10 @@
 
 pub mod crypto;
 pub mod error;
-pub mod pq_kem;
 pub mod storage;
 
 pub use crypto::{decrypt_backup, encrypt_backup, OobEnvelope, OobKeypair, WrappedKey};
 pub use error::OobError;
-pub use pq_kem::{hybrid_unwrap_dek, hybrid_wrap_dek, HybridKeypair, HybridWrappedKey};
 pub use storage::{InMemoryStorage, LocalFsStorage, OobStorage};
 
 #[cfg(test)]

@@ -1,99 +1,128 @@
 # Zyoza: Proof-Carrying Shielded State Objects for Zcash
 
-**Version 1.1 — Technical Whitepaper**
+**Author:** `zkzoeee`  
+**Date:** November 2026 · **Version:** 2.0  
+**Status:** *Research prototype — real `tachyon-zcash/ragu` recursive PCD (`7,168 B` constant `CompressedProof<Pasta>`), Halo2 IPA, Pallas ECDH, and ChaCha20-Poly1305 cryptography running over a simulated in-memory settlement ledger. Not audited.*
+
+---
 
 ## Abstract
-Public blockchains expose the complete ownership graph, price history, and metadata of non-fungible assets, turning collectors, event attendees, and credential holders into targets. Conversely, Zcash’s shielded protocols—**Orchard**, **Zcash Shielded Assets (ZSA, ZIP 226/227)**, and **Project Tachyon**—preserve financial privacy by keeping the base layer intentionally minimal, omitting on-chain media storage, arbitrary state machines, and public indexability.
+Public blockchains expose the entire ownership graph, bid history, and metadata of non-fungible assets. Conversely, Zcash’s shielded protocols—**Orchard**, **Zcash Shielded Assets (ZSA, ZIP 226/227)**, and **Project Tachyon**—preserve financial privacy by keeping consensus intentionally minimal, omitting on-chain media storage, arbitrary state machines, and public indexers.
 
-**Zyoza** bridges this gap without bloating Zcash L1. Zyoza wraps encrypted out-of-band payloads (`zyoza-oob`) inside constant-size recursive **Ragu non-uniform Proof-Carrying Data (PCD)** (`zyoza-proofs`) and anchors anti-double-spend commitments onto Zcash (`zyoza-settlement`). Every Zyoza object derives a **ZIP 227-compatible `AssetId`** and Pallas **`AssetBase`** from day one, allowing assets minted today via Orchard single-use seals to **crystallize 1:1** into native L1 ZSA notes and scale to **Tachyon** aggregated bundles with zero broken identifiers.
+**Zyoza** bridges this gap without adding permanent state bloat to Zcash L1. Encrypted payloads travel out-of-band (`zyoza-oob`), heterogeneous lifecycle rules fold recursively via **`tachyon-zcash/ragu`** non-uniform Proof-Carrying Data (`zyoza-proofs`), and anti-double-spend commitments anchor to Zcash (`zyoza-settlement`). Every Zyoza object derives a **ZIP 227-aligned `AssetDigest` / `AssetBase`** from day one, enabling Stage I single-use seals to upgrade 1:1 into native Stage II ZSA notes and Stage III Tachyon bundles.
 
 ---
 
-## 1. The Core Engineering Insight: Three Orthogonal Layers
+## 1. Implementation Status Matrix
 
-Instead of forcing Zcash validators to store metadata or execute smart-contract VMs, Zyoza splits every digital object into three independent layers:
+To distinguish implemented cryptography from simulated ledger components and future design targets, the reference workspace (`./zyoza`, 13 Rust crates) maintains the following boundaries:
 
-| Layer | Responsibility | Cryptographic Mechanism |
+| Component | Status | What Runs in the Reference Code |
 | :--- | :--- | :--- |
-| **1. Identity & Scarcity (`zyoza-core`)** | Canonical asset ID, private supply caps, selective viewing keys | ZIP 227 `AssetId` / Pallas `AssetBase`, `CollectionSpec` nullifiers, `ObjectViewingKey` |
-| **2. Out-of-Band Payload (`zyoza-oob`)** | Encrypted media, off-chain state, O(1) key handover, backups | `ChaCha20Poly1305` DEK + Pallas ECDH / hybrid `ML-KEM-768` key wrapping |
-| **3. Lineage & Settlement (`zyoza-proofs`, `zyoza-settlement`)** | Programmable transition rules, provenance, double-spend prevention | Halo2 IPA & `RaguPcdEngine`; `OrchardSeal` -> `OrchardZSA` -> `Tachyon` |
-
-**Why this matters:** Consensus nodes only ever validate standard shielded notes and 32-byte nullifiers. Megabytes of artwork and arbitrarily long provenance histories add **zero bytes** of permanent validator bloat and align directly with **Project Tachyon’s** removal of in-band secret distribution.
-
----
-
-## 2. Anatomy of a 512-Byte `"ZYOZ"` Seal & O(1) Key Re-Wrapping
-
-### 2.1 Exact Byte Layout Inside an Orchard Encrypted Memo
-In Stage I (live on Zcash today), each mint or transfer commits its state inside the standard 512-byte encrypted Orchard memo field:
-
-```text
-Byte Offset:  0..4     4..6    6..10     10..42       42..74       74..106      106..138      138..140   140..512
-            ┌────────┬───────┬─────────┬────────────┬────────────┬────────────┬─────────────┬──────────┬──────────────┐
-Field:      │ "ZYOZ" │ v0001 │ Profile │  AssetId   │ StateRoot  │   Nonce    │  OOB Hash   │ URI Len  │   OOB URI    │
-Size:       │  4 B   │  2 B  │   4 B   │   32 B     │   32 B     │   32 B     │    32 B     │   2 B    │    372 B     │
-            └────────┴───────┴─────────┴────────────┴────────────┴────────────┴─────────────┴──────────┴──────────────┘
-```
-
-### 2.2 O(1) Bandwidth Transfers via DEK Re-Wrapping
-Uploading and re-encrypting large media files on every transfer is prohibitive. Zyoza encrypts the media payload *once* under a random 256-bit Data Encryption Key ($\text{DEK}$) using `ChaCha20Poly1305` with $\text{AAD} = \text{AssetId}$.
-* When Alice transfers the object to Bob, Alice unwraps the 32-byte $\text{DEK}$ with her secret key and re-encapsulates **only those 32 bytes** to Bob’s public key (`rewrap_for_recipient`).
-* For long-lived archival art and RWA deeds, `zyoza-oob::pq_kem` combines classical Pallas ECDH with post-quantum KEM encapsulation (`hybrid-pallas-mlkem768-hkdf-sha256`) so "harvest now, decrypt later" adversaries must break both assumptions:
-  $$\text{KEK} = \text{HKDF-SHA256}_{\text{AssetId}}(\text{SS}_{\text{Pallas}} \parallel \text{SS}_{\text{PQ}})$$
+| **Ragu Non-Uniform Recursive PCD** (`zyoza-proofs`) | **Implemented** | Real `tachyon-zcash/ragu` (`Application<Pasta, WalletRank, 5>`) with 7 registered `Step<Pasta>` circuits (`seed`, `fuse`, `compress`, `verify_compressed`) and in-circuit state contiguity. |
+| **Poseidon-Merkle Ownership Proofs** (`zyoza-proofs`) | **Implemented** | Ragu `OwnershipMerkleCircuit` proving depth-4 Poseidon Merkle inclusion + owner secret preimage + fresh verifier challenge. |
+| **Supply-Cap Range Proof** (`zyoza-proofs`) | **Implemented** | Halo2 (`k = 6`, Pasta) 16-bit binary decomposition proving $1 \le \text{token\_index} \le \text{max\_supply}$. |
+| **ZIP 302 Binary Memo Codec & ZIP 227 Digest** (`zyoza-core`) | **Implemented** | 512-byte `[0xFF, 'Z', 'Y', 'O', 'Z', ...]` codec, `BLAKE2b-512("ZSA-Asset-Digest")`, Pallas `GroupHash("z.cash:OrchardZSA")`, and `CollectionSpec` nullifiers. |
+| **Out-of-Band AEAD & Pallas ECDH Re-Wrap** (`zyoza-oob`) | **Implemented** | `ChaCha20Poly1305` payload encryption + ephemeral Pallas ECDH + HKDF-SHA256 32-byte DEK re-wrapping + seed-derived backups. |
+| **Commit-Reveal Sealed Bids** (`apps/gallery-demo`) | **Implemented** | `BLAKE2b-256` salted bid commitments; bid amounts remain hidden until the reveal phase. |
+| **Threshold Schnorr Issuer Signing** (`zyoza-settlement`) | **Implemented (Trusted Dealer)** | 2-round `t-of-n` Lagrange-interpolated Schnorr signing on Pallas; uses `keygen_dealer` (interactive DKG is a design target). |
+| **Orchard / ZSA / Tachyon Ledgers** (`zyoza-settlement`) | **Simulated** | Real `orchard` key/address derivation paired with in-memory commitment/nullifier ledgers and a JSON-RPC mock transport; not yet wired to `zebrad`/`lightwalletd`. |
+| **Post-Quantum Hybrid KEM (`ML-KEM-768`)** | **Design Target** | Planned hybrid HKDF combiner alongside Pallas ECDH for multi-decade archival objects; not yet wired to an `ml-kem` crate. |
+| **Trustless PCZT ZEC <-> Zyoza Atomic Swap** | **Design Target** | Planned 2-party Partially Constructed Zcash Transaction flow; Studio currently executes post-clear handoff in memory. |
 
 ---
 
-## 3. Private Scarcity Without Public `totalSupply()`
+## 2. Verification & Enforcement Model: Who Checks What?
 
-On Ethereum, buyers verify scarcity by reading public storage; on a shielded chain, mints are invisible. Zyoza guarantees collection rules privately using a declarative `CollectionSpec(issuer_vk, slug, max_supply, unique_media, mint_window)`:
+A central question in any client-side validated (CSV) protocol on a shielded chain is **who enforces uniqueness and retirement when consensus nodes know nothing about Zyoza** and memos are encrypted to recipients.
 
-1. **Deterministic Domain-Separated Mint Nullifiers:** Every governed mint must atomically reveal up to three deterministic nullifiers:
-   * $\text{NF}_{\text{aid}} = \text{BLAKE2b}(\text{"ZYOZA-MINT-AID1\_"}, \text{col\_id} \parallel \text{AssetId})$ — blocks minting the same `AssetId` twice with a new nonce.
-   * $\text{NF}_{\text{idx}} = \text{BLAKE2b}(\text{"ZYOZA-MINT-IDX1\_"}, \text{col\_id} \parallel \text{token\_index})$ — blocks two assets from claiming slot $i \in [1, N]$.
-   * $\text{NF}_{\text{med}} = \text{BLAKE2b}(\text{"ZYOZA-MINT-MED1\_"}, \text{col\_id} \parallel \text{SHA256}(\text{media}))$ — blocks copy-minting identical media inside the collection.
-2. **Zero-Knowledge Supply-Cap Range Proof (`IssuanceCapEngine`):** A Halo2 circuit over Pasta $\mathbb{F}_p$ decomposes $(i - 1)$ and $(N - i)$ into 16 binary-constrained bits ($b \cdot (1 - b) = 0$) and enforces $(i - 1) + 1 + (N - i) = N$, proving $1 \le i \le N$ without revealing which edition number was minted.
+### 2.1 How a Buyer Verifies Lineage Across Encrypted Memos
+Zcash validators only verify Orchard note validity and Orchard nullifier non-reuse—they never inspect the 512-byte memo. Enforcement therefore happens at the **recipient / verifier boundary** before a buyer accepts an asset or co-signs payment:
+1. **Recursive Ragu PCD Proof (`zyoza-proofs`):** Rather than revealing raw historical notes or prior owners’ viewing keys, the seller hands the buyer a succinct `CompressedProof<Pasta>` from `RaguPcdEngine` attesting that every transition from `MintCircuit` through intermediate `TransferCircuit` / `RoyaltyCircuit` steps satisfied the registered subcircuit constraints.
+2. **Current Unspent Seal Opening:** For the *current* tip, the seller reveals the opening witness linking the live Orchard note to the 512-byte seal commitment, and transfers the object by spending that exact Orchard note (publishing its L1 Orchard nullifier) while creating the buyer’s new note. Once that transaction mines, Zcash consensus itself prevents the seller from spending the retired Orchard note again.
 
----
-
-## 4. Why Ragu Non-Uniform PCD Beats Indexers and Monolithic zkVMs
-
-Verifying an object’s lifecycle (royalties paid, lockups respected, event check-ins, game upgrades) faces a classic trilemma:
-* **Public Indexers (Ethereum/Solana):** Fast to verify, zero privacy—every past owner and price is public.
-* **Client-Side History Replay (Legacy CSV):** Leaks the entire transaction DAG to every future buyer and grows linearly $O(H)$ with hop count $H$.
-* **Monolithic Universal Circuits / zkVMs:** Preserve privacy, but force every simple transfer to prove one giant worst-case circuit.
-
-**Zyoza’s Solution — Ragu Non-Uniform PCD (`zyoza-proofs`):**
-Built over Zcash’s cycle of **Pasta curves** (`Pallas` / `Vesta`, no trusted setup), Zyoza partitions rules into lightweight step subcircuits (`MintStep`, `TransferStep`, `RoyaltyStep`, `TicketCheckInStep`, `AttributeUpgradeStep`):
-* **Pay-Per-Step Proving:** Each transition proves *only* the subcircuit for that action (e.g., `RaguRuleCircuit` enforcing $\text{royalty\_req} \cdot (1 - \text{royalty\_paid}) = 0$ in Plonk constraints).
-* **Constant-Size Lineage:** Step $k$ folds the running accumulator $\text{acc}_k = \text{acc}_{k-1} + H_{\text{step}}(\text{profile\_id}, \text{AssetId}, C_k)$ into a single constant-size proof ($\approx 6.2\text{ KB}$ JSON / $2,112\text{ B}$ raw IPA). Whether an NFT has been traded once or 500 times, verification takes $\approx 16\text{ ms}$ and reveals **zero prior owners**.
-* **Cross-Profile Composability:** A single object can fold steps across Zyoza’s five vertical profiles—collectibles (`NFT1`), event tickets (`TKT1`), soulbound credentials (`CRD1`), mutable game gear (`GAM1`), and compliant real-world deeds (`RWA1`).
+### 2.2 Who Enforces `CollectionSpec` Mint Nullifiers (`NF_aid`, `NF_idx`, `NF_med`)?
+While spending an existing Orchard note prevents transfer double-spends, **minting** requires preventing a creator from silently issuing two genesis notes for slot `#42`.
+* **In Stage I (Pre-ZSA):** Because Orchard memos are private, `NF_aid`, `NF_idx`, and `NF_med` **cannot** remain hidden inside encrypted memos if buyers want global uniqueness guarantees. Stage I deployments must anchor these 32-byte deterministic mint nullifiers into a **publicly auditable bulletin stream** (e.g., transparent Zcash `OP_RETURN` outputs or a shared indexer log) so every buyer’s client can verify that slot `#42` was claimed exactly once and matches the creator’s `CollectionSpec`. *(In our prototype, `OrchardSealAdapter` simulates this shared nullifier set in memory.)*
+* **In Stage II (Native ZSA, ZIP 226/227):** Supply enforcement moves **directly into Zcash L1 consensus**. ZIP 227 Issuance Bundles publicly commit total issued supply per `AssetDigest` and support `finalize = true`, so every Zcash full node rejects duplicate `1/1` mints natively without an external indexer.
 
 ---
 
-## 5. Selective Disclosure & Front-Running-Resistant Markets
+## 3. Identity, ZIP 302 Memo Layout, and Out-of-Band Wrapping
 
-* **Per-Object Viewing Keys (`ObjectViewingKey`):** Derived as $\text{BLAKE2b}_{\text{"ZYOZA-OVK-v1"}}(\text{AssetId} \parallel \text{secret})$. A collector can reveal *one* NFT’s title, art, and traits to a gallery without exposing any other asset in their Zcash wallet.
-* **Halo2 Ownership & Trait Proofs:** Sellers prove *"I hold an unspent Zyoza in Collection X (or with trait `shades = Venetian`)"* bound to a fresh challenge, powering **ZK-verified listings** and **sealed-bid ZEC auctions** where losing bids stay private.
+### 3.1 ZIP 227-Aligned `AssetDigest` and `AssetBase`
+Following ZIP 227, Zyoza hashes the description with `BLAKE2b-256("ZSA-AssetDescCRH")`, prefixes version byte `0x00` and the issuer key, hashes the canonical encoding with `BLAKE2b-512("ZSA-Asset-Digest")` to obtain the 64-byte `AssetDigest`, and maps it onto Pallas:
+$$\text{assetDescHash} = \text{BLAKE2b-256}_{\text{"ZSA-AssetDescCRH"}}(\text{asset\_desc})$$
+$$\text{AssetDigest} = \text{BLAKE2b-512}_{\text{"ZSA-Asset-Digest"}}([0\text{x}00] \parallel \text{ik} \parallel \text{assetDescHash})$$
+$$\text{AssetBase} = \text{GroupHash}^{\mathbb{P}}_{\text{"z.cash:OrchardZSA"}}(\text{AssetDigest})$$
+Stage I memo seals carry `AssetId = AssetDigest[0..32]` as a compact 32-byte key while preserving the full derivation for Stage II ZSA crystallization.
 
----
+### 3.2 ZIP 302 Binary Memo Layout (`0xFF` Prefix)
+Per **ZIP 302**, memos beginning with bytes `< 0xF5` are interpreted by Zcash wallets as UTF-8 text, whereas **`0xFF` designates arbitrary application binary data**. Zyoza’s 512-byte seal begins with `[0xFF, 'Z', 'Y', 'O', 'Z']` so standard wallets never display raw binary seals as garbled text:
 
-## 6. Three-Stage Zcash Settlement Path (Zero Broken IDs)
-
-Because `AssetId` and Pallas `AssetBase = HashToCurve("z.cash:OrchardZSA", AssetId)` follow **ZIP 227** from day one, Zyoza upgrades cleanly across Zcash’s roadmap:
-
-1. **Stage I — Orchard Single-Use Seals (Live Today):** `"ZYOZ"` 512-byte memo commitments anchored in standard Orchard notes; spending the note retires the seal.
-2. **Stage II — Native ZSA Crystallization (ZIP 226/227):** Holders prove seal retirement via Halo2 (`prove_migration`), co-signed by a `2-of-3` Pallas **FROST** threshold committee, to mint a `value = 1` finalized L1 `ZsaNote` with the **identical `AssetId`**. This unlocks trustless 1-transaction `ZSA <-> ZEC` atomic swaps.
-3. **Stage III — Project Tachyon:** `TachyonAdapter` aggregates 10,000+ mints and nullifiers into a single 32-byte `Tachystamp` epoch root in `119 ms`, letting mobile wallets verify state via prunable $O(\log N)$ Merkle paths (`14` hashes) without leaking queried `AssetId`s.
-
----
-
-## 7. Empirical Reference Benchmarks
-
-Measured on the 13-crate Rust workspace (`rustc 1.99`, Pasta `EqAffine`/`Fp`, $k = 6$):
-
-| Operation | Prove / Execute | Verify | Artifact Size |
+| Bytes | Size | Field | Purpose |
 | :--- | :--- | :--- | :--- |
-| **Halo2 Ownership / Trait Proof** | `740 ms` | `27 ms` | `5,935 B` (`2,112 B` raw IPA) |
-| **Ragu 12-Hop Composable PCD (`NFT1` + `TKT1`)** | `~315 ms / hop` | `16 ms` ($O(1)$) | `6,279 B` (`2,112 B` raw IPA) |
-| **Tachyon 10,000-Mint Epoch + Merkle Sync** | `119 ms` batch | `< 1 ms` (`14` hashes) | `32 B` `Tachystamp` root |
+| `0..5` | `5 B` | `magic` | `[0xFF, 'Z', 'Y', 'O', 'Z']` (ZIP 302 arbitrary binary marker + tag) |
+| `5..7` | `2 B` | `version` | `0x0001` (`u16` big-endian) |
+| `7..11` | `4 B` | `profile_id` | Vertical tag (`NFT1`, `TKT1`, `CRD1`, `GAM1`, `RWA1`) |
+| `11..43` | `32 B` | `asset_id` | `AssetDigest[0..32]` |
+| `43..75` | `32 B` | `state_root` | `SHA-256` commitment to canonical profile state |
+| `75..107` | `32 B` | `nonce` | Per-transition randomness |
+| `107..139` | `32 B` | `oob_pointer_hash` | `BLAKE2b-256` integrity hash of the `OobEnvelope` |
+| `139..141` | `2 B` | `oob_uri_len` | UTF-8 byte length (`0..=371`) |
+| `141..512` | `371 B` | `oob_uri_bytes` | Off-chain URI/CID (zero-padded) |
+
+### 3.3 O(1) Bandwidth DEK Re-Wrapping & Data Availability
+Payloads are encrypted once under a random 256-bit `ChaCha20Poly1305` Data Encryption Key (`DEK`) with `AAD = AssetId`. Transfers (`rewrap_for_recipient`) unwrap the 32-byte `DEK` and re-encapsulate it via ephemeral Pallas ECDH + `HKDF-SHA256` to the recipient’s public key—moving large media files without re-uploading ciphertext.
+* **Data Availability Assumption:** Because Zcash L1 stores no payload data, losing the `OobEnvelope` renders an asset unspendable in CSV workflows (analogous to RGB). Zyoza mitigates this via content-addressed pinning (IPFS/Arweave) plus `encrypt_backup(wallet_seed, state)` snapshots recoverable from the holder’s seed phrase.
+
+---
+
+## 4. Ragu Non-Uniform Recursive PCD (`zyoza-proofs`)
+
+Zyoza integrates **`tachyon-zcash/ragu`** (`Application<'static, Pasta, WalletRank, 5>` at `WalletRank = R<13>`, no trusted setup) to turn static tokens into proof-carrying state objects:
+
+1. **Non-Uniform Registered Subcircuits & Contiguity Header:** Rather than one monolithic circuit, Zyoza registers specialized `Step<Pasta>` implementations over a 4-element `LineageHeader` (`[asset_id, genesis_commitment, latest_commitment, lineage_acc]`):
+   * `MintCircuit` (`Index 1`): Seeds `LineageHeader` via Ragu’s in-circuit Poseidon `Sponge` over `(profile, asset_id, commitment, secret)`.
+   * `TransferCircuit` (`Index 2`): Enforces in-circuit asset invariance (`left.asset == witness.asset`) and state contiguity (`left.latest == witness.prev_commit`) before fusing `Pcd<Pasta, WalletRank, LineageHeader>`.
+   * `RoyaltyCircuit` (`Index 3`): Allocates `royalty_required` and `royalty_paid` via `ragu::primitives::Boolean`, enforces `royalty_required && !royalty_paid == 0` in-circuit, and fuses the prior lineage proof.
+   * `TicketCheckInCircuit` (`Index 4`) & `UpgradeCircuit` (`Index 5`): Compute in-circuit Poseidon event check-in nullifiers (`TKT1`) and item upgrades (`GAM1`), enabling cross-profile folding on a single asset.
+2. **Poseidon-Merkle ZK Ownership (`OwnershipMerkleCircuit`, `Index 6`):** Proves in zero knowledge that `leaf = Poseidon(asset_id, Poseidon(secret))` resolves via a depth-4 Merkle path to a public `collection_root`, bound to a fresh verifier `challenge` (`OwnershipHeader = Poseidon(root, challenge)`). Unlisted assets, wrong secrets, or replayed challenges fail `verify_compressed`.
+
+---
+
+## 5. Stage III (Tachyon): What Replaces the Stage I Memo?
+
+Project Tachyon achieves planetary scale in part by **removing in-band secret distribution (eliminating 512-byte on-chain encrypted memos)** in favor of out-of-band note transmission and compact 32-byte **tachygrams** (uniform field elements representing commitments and nullifiers).
+
+Because Zyoza *already* delivers encrypted payloads and Ragu proofs out-of-band in Stage I (`zyoza-oob`), transitioning to Tachyon requires **no application-layer redesign**:
+* The 9-field header previously serialized into the 512-byte Orchard memo simply moves inside the out-of-band `OobEnvelope` transmitted peer-to-peer (e.g., via encrypted relay or URI).
+* On-chain consensus receives **only** the 32-byte `Tachygram = Poseidon/BLAKE2b(asset_id, state_commitment)`, aggregated into 32-byte epoch `Tachystamp` roots and verified by mobile wallets via prunable $O(\log N)$ Merkle paths (`TachyonAdapter`).
+
+---
+
+## 6. Trust Assumptions & Threat Model
+
+1. **FROST Crystallization Committee:** Upgrading a Stage I seal into a Stage II native ZSA note requires signing a ZIP 227 Issuance Bundle under the collection’s `issuer_key`. To avoid a single hot-key rug-pull, Zyoza splits `issuer_key` across a `t-of-n` (`2-of-3`) Pallas threshold committee—typically *(1) the collection creator, (2) an independent crystallization relayer, and (3) a community/auditor cosigner*—which co-signs issuance only upon verifying `prove_migration` and Stage I burn confirmation. *(Prototype note: `frost_issuer.rs` currently uses trusted-dealer Shamir setup `keygen_dealer`; production deployments require interactive FROST DKG.)*
+2. **Marketplace Privacy & Front-Running:** `ObjectViewingKey` (`OVK`) scopes metadata disclosure to a single `AssetId` rather than the seller’s wallet viewing key. Sealed bids use salted `BLAKE2b-256` commitments (`commit -> reveal -> clear`), hiding bid values during the bidding window, though revealed bids become visible to the gallery operator at clearing time unless paired with MPC/FHE or blind escrow.
+3. **Host vs. Circuit Completeness:** While `RoyaltyCircuit`, `OwnershipMerkleCircuit`, and `IssuanceCapEngine` enforce their core predicates in-circuit, complex string/JSON schema checks in `zyoza-profile-*` currently execute in Rust host code and remain future candidates for full Ragu gadget compilation.
+
+---
+
+## 7. Related Work
+
+* **RGB & Taproot Assets (Bitcoin CSV):** Pioneered anchoring off-chain asset state to L1 single-use seals, but require linear $O(H)$ client-side DAG history validation that leaks past state transitions to subsequent recipients. Zyoza replaces DAG replay with constant-size recursive Ragu PCD proofs.
+* **Shielded CSV (Nick, Eagen, Linus — ePrint 2025/085):** Formalized combining L1 nullifiers with recursive PCD to eliminate history leakage in client-side validation. Zyoza adapts this paradigm specifically to Zcash’s Pasta curves, ZIP 227 asset identity, and Tachyon roadmap.
+* **ZIP 226 & ZIP 227 (OrchardZSA):** Provide consensus-enforced custom asset balances and atomic swaps on Zcash, which Zyoza complements with out-of-band encrypted media, per-object viewing keys, and programmable multi-vertical rules.
+
+---
+
+## 8. References
+
+1. Sean Bowe, Jack Grigg, Daira-Emma Hopwood. *Halo: Recursive Proof Composition without a Trusted Setup.* IACR ePrint 2019/1021.
+2. Sean Bowe et al. *Ragu: Proof-Carrying Data Framework for Project Tachyon.* `https://github.com/tachyon-zcash/ragu` (2025–2026).
+3. Sean Bowe. *Project Tachyon: Planetary-Scale Shielded Zcash.* Electric Coin Company / Tachyon ResearchPosts (2025–2026).
+4. Pablo Kogan, Vivek Arte, Daniel Benarroch, Jack Grigg, Daira-Emma Hopwood, Str4d. *ZIP 226: Transfer and Burn of Zcash Shielded Assets* & *ZIP 227: Issuance of Zcash Shielded Assets.* `https://zips.z.cash/`.
+5. Brad Miller, Jack Grigg. *ZIP 302: Standardized Memo Field Format.* `https://zips.z.cash/zip-0302`.
+6. Chelsea Komlo, Ian Goldberg. *FROST: Flexible Round-Optimized Schnorr Threshold Signatures.* SAC 2020 / RFC 9591.
+7. Jonas Nick, Liam Eagen, Robin Linus. *Shielded CSV: Private and Efficient Client-Side Validation.* IACR ePrint 2025/085.

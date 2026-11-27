@@ -1,13 +1,16 @@
-//! Pasta-curve ZK proof engine (Halo2 IPA today, Ragu non-uniform PCD tomorrow).
+//! Zero-knowledge proof engines for Zyoza:
+//! - `RaguPcdEngine`: **Real `tachyon-zcash/ragu` non-uniform recursive PCD** over Pasta (`WalletRank`),
+//!   including Poseidon-Merkle collection ownership proofs (`OwnershipMerkleCircuit`) and
+//!   recursive multi-profile step folding (`MintCircuit`, `TransferCircuit`, `RoyaltyCircuit`,
+//!   `TicketCheckInCircuit`, `UpgradeCircuit`).
+//! - `IssuanceCapEngine`: Halo2 16-bit binary range-check circuit proving `1 <= token_index <= max_supply`.
+//! - `Halo2ProofEngine`: Halo2 Pasta IPA prover for attribute & migration statements, delegating
+//!   collection ownership verification to `RaguPcdEngine`'s Poseidon-Merkle circuit.
 
 pub mod ragu_pcd;
-pub use ragu_pcd::{RaguPcdEngine, RaguPcdProof, RaguStepKind, RaguStepWitness};
 
 use blake2b_simd::Params as Blake2bParams;
 use ff::{FromUniformBytes, PrimeField};
-use zyoza_core::{
-    AssetId, ZyozaError, OwnershipProofRequest, OwnershipVerifyRequest, ProofBytes, ProofEngine,
-};
 use halo2_proofs::circuit::{Layouter, SimpleFloorPlanner, Value};
 use halo2_proofs::pasta::{EqAffine, Fp};
 use halo2_proofs::plonk::{
@@ -21,10 +24,18 @@ use rand::rand_core::UnwrapErr;
 use rand::rngs::SysRng;
 use serde::{Deserialize, Serialize};
 use std::sync::OnceLock;
+use zyoza_core::{
+    AssetId, OwnershipProofRequest, OwnershipVerifyRequest, ProofBytes, ProofEngine, ZyozaError,
+};
 
-pub use zyoza_core;
 pub use halo2_proofs;
 pub use pasta_curves;
+pub use ragu;
+pub use ragu_pcd::{
+    bytes_to_ragu_fp, poseidon_1, poseidon_2, CollectionMerkleTree, RaguPcdEngine, RaguPcdProof,
+    RaguStepKind, RaguStepWitness, MERKLE_DEPTH,
+};
+pub use zyoza_core;
 
 const CIRCUIT_K: u32 = 6;
 
@@ -37,16 +48,14 @@ struct KnowledgeConfig {
     selector: Selector,
 }
 
-/// Halo2 circuit proving knowledge of `(secret, leaf)` bound to `challenge`
-/// via `public_digest = secret * challenge + leaf` over Pasta `Fp`.
 #[derive(Clone, Default)]
-struct MembershipKnowledgeCircuit {
+struct StatementBindingCircuit {
     secret: Value<Fp>,
     leaf: Value<Fp>,
     challenge: Value<Fp>,
 }
 
-impl Circuit<Fp> for MembershipKnowledgeCircuit {
+impl Circuit<Fp> for StatementBindingCircuit {
     type Config = KnowledgeConfig;
     type FloorPlanner = SimpleFloorPlanner;
 
@@ -66,13 +75,12 @@ impl Circuit<Fp> for MembershipKnowledgeCircuit {
         meta.enable_equality(challenge);
         meta.enable_equality(instance);
 
-        meta.create_gate("knowledge_binding", |meta| {
+        meta.create_gate("statement_binding", |meta| {
             let s = meta.query_selector(selector);
             let sec = meta.query_advice(secret, Rotation::cur());
             let lf = meta.query_advice(leaf, Rotation::cur());
             let ch = meta.query_advice(challenge, Rotation::cur());
             let out = meta.query_advice(secret, Rotation::next());
-            // out == sec * ch + lf
             vec![s * (sec * ch + lf - out)]
         });
 
@@ -91,17 +99,13 @@ impl Circuit<Fp> for MembershipKnowledgeCircuit {
         mut layouter: impl Layouter<Fp>,
     ) -> Result<(), PlonkError> {
         let (ch_cell, out_cell) = layouter.assign_region(
-            || "knowledge_binding_row",
+            || "statement_binding_row",
             |mut region| {
                 config.selector.enable(&mut region, 0)?;
                 region.assign_advice(|| "secret", config.secret, 0, || self.secret)?;
                 region.assign_advice(|| "leaf", config.leaf, 0, || self.leaf)?;
-                let ch = region.assign_advice(
-                    || "challenge",
-                    config.challenge,
-                    0,
-                    || self.challenge,
-                )?;
+                let ch =
+                    region.assign_advice(|| "challenge", config.challenge, 0, || self.challenge)?;
                 let out_val = self.secret * self.challenge + self.leaf;
                 let out = region.assign_advice(|| "digest", config.secret, 1, || out_val)?;
                 Ok((ch, out))
@@ -125,26 +129,26 @@ static KEYS: OnceLock<CachedKeys> = OnceLock::new();
 fn get_keys() -> &'static CachedKeys {
     KEYS.get_or_init(|| {
         let params = Params::<EqAffine>::new(CIRCUIT_K);
-        let empty = MembershipKnowledgeCircuit::default();
+        let empty = StatementBindingCircuit::default();
         let vk = keygen_vk(&params, &empty).expect("keygen_vk");
         let pk = keygen_pk(&params, vk.clone(), &empty).expect("keygen_pk");
         CachedKeys { params, vk, pk }
     })
 }
 
-/// Serialized Halo2 IPA proof payload with its public digest.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Halo2ProofPayload {
     pub digest_bytes: [u8; 32],
     pub ipa_proof: Vec<u8>,
 }
 
-/// Halo2 IPA proof engine on Pasta curves.
+/// Proof engine delegating collection-membership ownership & PCD transitions to `RaguPcdEngine`,
+/// while providing Halo2 IPA proofs for attribute & burn-migration statements.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Halo2ProofEngine;
 
 impl Halo2ProofEngine {
-    /// Generates a zero-knowledge proof that an owned NFT possesses trait `key=val`.
+    /// Generates a Halo2 proof of trait commitment knowledge bound to `challenge`.
     pub fn prove_attribute(
         &self,
         asset_id: &AssetId,
@@ -162,10 +166,10 @@ impl Halo2ProofEngine {
             b"ZYOZA-CHAL-v1___",
             &[&challenge, trait_key.as_bytes(), trait_val.as_bytes()],
         );
-        self.prove_knowledge(secret, leaf, ch)
+        self.prove_statement(secret, leaf, ch)
     }
 
-    /// Verifies a trait-attribute proof against `(trait_key, trait_val, challenge)`.
+    /// Verifies a trait proof against `(trait_key, trait_val, challenge)`.
     pub fn verify_attribute(
         &self,
         trait_key: &str,
@@ -177,10 +181,10 @@ impl Halo2ProofEngine {
             b"ZYOZA-CHAL-v1___",
             &[&challenge, trait_key.as_bytes(), trait_val.as_bytes()],
         );
-        self.verify_knowledge(ch, proof)
+        self.verify_statement(ch, proof)
     }
 
-    /// Generates a Halo2 ZK proof for Burn-to-Crystallize (Phase 1 seal -> Phase 4 native ZSA).
+    /// Generates a Halo2 ZK proof for Burn-to-Crystallize (`Stage I seal -> Stage II ZSA`).
     pub fn prove_migration(
         &self,
         asset_id: &AssetId,
@@ -190,7 +194,7 @@ impl Halo2ProofEngine {
         let secret = hash_to_fp(b"ZYOZA-SEC-v1____", &[secret_witness]);
         let leaf = hash_to_fp(b"ZYOZA-LEAF-v1___", &[&asset_id.0]);
         let ch = hash_to_fp(b"ZYOZA-MIG-v1____", &[&asset_id.0, &phase1_commitment]);
-        self.prove_knowledge(secret, leaf, ch)
+        self.prove_statement(secret, leaf, ch)
     }
 
     /// Verifies a Halo2 Burn-to-Crystallize migration proof.
@@ -201,13 +205,13 @@ impl Halo2ProofEngine {
         proof: &[u8],
     ) -> Result<bool, ZyozaError> {
         let ch = hash_to_fp(b"ZYOZA-MIG-v1____", &[&asset_id.0, &phase1_commitment]);
-        self.verify_knowledge(ch, proof)
+        self.verify_statement(ch, proof)
     }
 
-    fn prove_knowledge(&self, secret: Fp, leaf: Fp, ch: Fp) -> Result<ProofBytes, ZyozaError> {
+    fn prove_statement(&self, secret: Fp, leaf: Fp, ch: Fp) -> Result<ProofBytes, ZyozaError> {
         let keys = get_keys();
         let digest = secret * ch + leaf;
-        let circuit = MembershipKnowledgeCircuit {
+        let circuit = StatementBindingCircuit {
             secret: Value::known(secret),
             leaf: Value::known(leaf),
             challenge: Value::known(ch),
@@ -232,7 +236,7 @@ impl Halo2ProofEngine {
             .map_err(|e| ZyozaError::Proof(format!("proof serialize: {e}")))
     }
 
-    fn verify_knowledge(&self, ch: Fp, proof: &[u8]) -> Result<bool, ZyozaError> {
+    fn verify_statement(&self, ch: Fp, proof: &[u8]) -> Result<bool, ZyozaError> {
         let payload: Halo2ProofPayload = serde_json::from_slice(proof)
             .map_err(|e| ZyozaError::Proof(format!("proof parse: {e}")))?;
         let digest = Option::<Fp>::from(Fp::from_repr(payload.digest_bytes))
@@ -240,7 +244,8 @@ impl Halo2ProofEngine {
 
         let keys = get_keys();
         let strategy = SingleVerifier::new(&keys.params);
-        let mut transcript = Blake2bRead::<_, EqAffine, Challenge255<_>>::init(&payload.ipa_proof[..]);
+        let mut transcript =
+            Blake2bRead::<_, EqAffine, Challenge255<_>>::init(&payload.ipa_proof[..]);
         Ok(verify_proof(
             &keys.params,
             &keys.vk,
@@ -254,10 +259,7 @@ impl Halo2ProofEngine {
 
 impl ProofEngine for Halo2ProofEngine {
     fn prove_ownership(&self, req: &OwnershipProofRequest) -> Result<ProofBytes, ZyozaError> {
-        let secret = hash_to_fp(b"ZYOZA-SEC-v1____", &[&req.secret_witness]);
-        let leaf = hash_to_fp(b"ZYOZA-LEAF-v1___", &[&req.asset_id.0]);
-        let ch = hash_to_fp(b"ZYOZA-OWN-v1____", &[&req.collection_root, &req.challenge]);
-        self.prove_knowledge(secret, leaf, ch)
+        RaguPcdEngine.prove_merkle_ownership(req)
     }
 
     fn verify_ownership(
@@ -265,19 +267,15 @@ impl ProofEngine for Halo2ProofEngine {
         req: &OwnershipVerifyRequest,
         proof: &[u8],
     ) -> Result<bool, ZyozaError> {
-        let ch = hash_to_fp(b"ZYOZA-OWN-v1____", &[&req.collection_root, &req.challenge]);
-        self.verify_knowledge(ch, proof)
+        RaguPcdEngine.verify_merkle_ownership(req, proof)
     }
 
     fn prove_transition(
         &self,
-        _prev_proof: Option<&[u8]>,
+        prev_proof: Option<&[u8]>,
         step_witness: &[u8],
     ) -> Result<ProofBytes, ZyozaError> {
-        let secret = hash_to_fp(b"ZYOZA-STEP-v1___", &[step_witness]);
-        let leaf = Fp::from(1u64);
-        let ch = hash_to_fp(b"ZYOZA-TRAN-v1___", &[step_witness]);
-        self.prove_knowledge(secret, leaf, ch)
+        RaguPcdEngine.prove_transition(prev_proof, step_witness)
     }
 
     fn verify_transition(
@@ -285,8 +283,7 @@ impl ProofEngine for Halo2ProofEngine {
         proof: &[u8],
         public_inputs: &[u8],
     ) -> Result<bool, ZyozaError> {
-        let ch = hash_to_fp(b"ZYOZA-TRAN-v1___", &[public_inputs]);
-        self.verify_knowledge(ch, proof)
+        RaguPcdEngine.verify_transition(proof, public_inputs)
     }
 }
 
@@ -301,78 +298,6 @@ fn hash_to_fp(personal: &[u8; 16], parts: &[&[u8]]) -> Fp {
     let mut wide = [0u8; 64];
     wide.copy_from_slice(state.finalize().as_bytes());
     Fp::from_uniform_bytes(&wide)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn halo2_ownership_and_attribute_proofs() {
-        let engine = Halo2ProofEngine;
-        let asset_id = AssetId::derive(&[0xAA; 32], b"zyoza:nft:halo2-test");
-        let collection_root = [0x11; 32];
-        let challenge = [0x22; 32];
-
-        let t0 = std::time::Instant::now();
-        let proof = engine
-            .prove_ownership(&OwnershipProofRequest {
-                asset_id,
-                collection_root,
-                secret_witness: b"alice-orchard-sk".to_vec(),
-                challenge,
-            })
-            .unwrap();
-        let prove_ms = t0.elapsed().as_millis();
-
-        let t1 = std::time::Instant::now();
-        let ok = engine
-            .verify_ownership(
-                &OwnershipVerifyRequest {
-                    collection_root,
-                    challenge,
-                },
-                &proof,
-            )
-            .unwrap();
-        let verify_ms = t1.elapsed().as_millis();
-        println!("Halo2 ownership prove={prove_ms}ms verify={verify_ms}ms bytes={}", proof.len());
-        assert!(ok);
-
-        // Wrong challenge must fail verification
-        assert!(!engine
-            .verify_ownership(
-                &OwnershipVerifyRequest {
-                    collection_root,
-                    challenge: [0x99; 32],
-                },
-                &proof,
-            )
-            .unwrap());
-
-        // Trait attribute proof
-        let attr_proof = engine
-            .prove_attribute(&asset_id, "rarity", "genesis", b"alice-orchard-sk", challenge)
-            .unwrap();
-        assert!(engine
-            .verify_attribute("rarity", "genesis", challenge, &attr_proof)
-            .unwrap());
-        assert!(!engine
-            .verify_attribute("rarity", "common", challenge, &attr_proof)
-            .unwrap());
-    }
-
-    #[test]
-    fn halo2_in_circuit_supply_cap_range_proof() {
-        let cap_engine = IssuanceCapEngine;
-        // Valid: token_index = 42 <= max_supply = 100
-        let proof_ok = cap_engine.prove_cap(42, 100).unwrap();
-        assert!(cap_engine.verify_cap(100, &proof_ok).unwrap());
-
-        // Invalid: token_index = 101 > max_supply = 100 -> fails verification
-        let proof_over = cap_engine.prove_cap(101, 100).unwrap();
-        assert!(!cap_engine.verify_cap(100, &proof_over).unwrap());
-    }
 }
 
 /// Halo2 16-bit range-check circuit proving `1 <= token_index <= max_supply` (up to 65,535).
@@ -429,7 +354,6 @@ impl Circuit<Fp> for IssuanceCapCircuit {
             let delta = meta.query_advice(bit_b, Rotation::cur());
             let cap = meta.query_advice(acc, Rotation::cur());
             let one = Expression::Constant(Fp::from(1u64));
-            // (idx - 1) + 1 + delta == cap
             vec![s * (idx_m1 + one + delta - cap)]
         });
 
@@ -455,7 +379,12 @@ impl Circuit<Fp> for IssuanceCapCircuit {
                 let mut sum_b = Value::known(Fp::from(0u64));
                 for i in 0..16 {
                     config.sel_bit.enable(&mut region, i)?;
-                    region.assign_advice(|| "bit_a", config.bit_a, i, || self.idx_minus_1_bits[i])?;
+                    region.assign_advice(
+                        || "bit_a",
+                        config.bit_a,
+                        i,
+                        || self.idx_minus_1_bits[i],
+                    )?;
                     region.assign_advice(|| "bit_b", config.bit_b, i, || self.delta_bits[i])?;
                     let weight = Fp::from(1u64 << i);
                     sum_a = sum_a + self.idx_minus_1_bits[i] * Value::known(weight);
@@ -539,5 +468,68 @@ impl IssuanceCapEngine {
             &mut transcript,
         )
         .is_ok())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ownership_and_attribute_proofs() {
+        let engine = Halo2ProofEngine;
+        let asset_id = AssetId::derive(&[0xAA; 32], b"zyoza:nft:test");
+        let tree = CollectionMerkleTree::from_holdings(&[(asset_id, b"alice-orchard-sk")]);
+        let collection_root = tree.root();
+        let challenge = [0x22; 32];
+
+        let proof = engine
+            .prove_ownership(&OwnershipProofRequest {
+                asset_id,
+                collection_root,
+                merkle_siblings: tree.path(0),
+                secret_witness: b"alice-orchard-sk".to_vec(),
+                challenge,
+            })
+            .unwrap();
+        assert!(engine
+            .verify_ownership(
+                &OwnershipVerifyRequest {
+                    collection_root,
+                    challenge,
+                },
+                &proof,
+            )
+            .unwrap());
+
+        assert!(!engine
+            .verify_ownership(
+                &OwnershipVerifyRequest {
+                    collection_root,
+                    challenge: [0x99; 32],
+                },
+                &proof,
+            )
+            .unwrap());
+
+        let attr_proof = engine
+            .prove_attribute(&asset_id, "rarity", "genesis", b"alice-orchard-sk", challenge)
+            .unwrap();
+        assert!(engine
+            .verify_attribute("rarity", "genesis", challenge, &attr_proof)
+            .unwrap());
+        assert!(!engine
+            .verify_attribute("rarity", "common", challenge, &attr_proof)
+            .unwrap());
+    }
+
+    #[test]
+    fn halo2_in_circuit_supply_cap_range_proof() {
+        let cap_engine = IssuanceCapEngine;
+        let proof_ok = cap_engine.prove_cap(42, 100).unwrap();
+        assert!(cap_engine.verify_cap(100, &proof_ok).unwrap());
+
+        let proof_over = cap_engine.prove_cap(101, 100).unwrap();
+        assert!(!cap_engine.verify_cap(100, &proof_over).unwrap());
     }
 }

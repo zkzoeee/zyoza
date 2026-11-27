@@ -3,7 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Zyoza Studio — Mint, Fold, Disclose, Trade &amp; Crystallize</title>
+  <meta name="description" content="Zyoza Studio — interactive cryptographic workbench for ZIP 227 identity, Pallas ECDH OOB wrapping, real Ragu recursive PCD folding, Poseidon-Merkle ownership proofs, and commit-reveal auctions." />
+  <link rel="icon" href="/logo.png" />
+  <title>Zyoza Studio — Mint, Transfer, Fold, Disclose, Trade &amp; Crystallize</title>
   <style>
     :root {
       --paper: #F7F4ED;
@@ -14,62 +16,135 @@
       --line: #DDD7C9;
       --accent: #C53D2F;
       --pine: #215A3E;
+      --amber: #8A5A10;
       --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
       --sans: -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
       --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: var(--paper); color: var(--ink); font-family: var(--sans); line-height: 1.55; }
+    body { background: var(--paper); color: var(--ink); font-family: var(--sans); line-height: 1.55; padding-bottom: 3.5rem; }
     a { color: inherit; text-decoration: none; }
-    header { border-bottom: 1px solid var(--line); padding: 1.1rem 2rem; display: flex; justify-content: space-between; align-items: center; background: var(--card); }
+    a:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .proto-banner {
+      background: #EFE9DA;
+      border-bottom: 1px solid var(--line);
+      padding: 0.48rem 1.25rem;
+      font-family: var(--mono);
+      font-size: 0.74rem;
+      color: var(--ink);
+      text-align: center;
+    }
+    .proto-banner strong { color: var(--accent); }
+
+    header {
+      border-bottom: 1px solid var(--line);
+      padding: 1rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      background: var(--card);
+    }
+    @media (max-width: 560px) {
+      header { padding: 0.85rem 1rem; }
+    }
     .brand { display: flex; align-items: center; gap: 0.65rem; font-family: var(--serif); font-size: 1.15rem; font-weight: 600; }
     .brand img { width: 34px; height: 34px; border-radius: 6px; object-fit: cover; border: 1px solid var(--line); }
-    .nav-links { display: flex; gap: 1.4rem; font-size: 0.88rem; color: var(--muted); }
+    .nav-links { display: flex; gap: 1rem; font-size: 0.86rem; color: var(--muted); align-items: center; flex-wrap: wrap; }
     .nav-links a:hover { color: var(--ink); }
 
-    .layout { max-width: 1220px; margin: 0 auto; padding: 2rem; display: grid; grid-template-columns: 1.35fr 0.9fr; gap: 2rem; align-items: start; }
-    @media (max-width: 940px) { .layout { grid-template-columns: 1fr; } }
+    .layout {
+      max-width: 1220px;
+      margin: 0 auto;
+      padding: 1.75rem 2rem;
+      display: grid;
+      grid-template-columns: 1.35fr 0.9fr;
+      gap: 2rem;
+      align-items: start;
+    }
+    @media (max-width: 940px) {
+      .layout { grid-template-columns: 1fr; padding: 1.25rem 1rem; }
+    }
 
-    .step-card { background: var(--card); border: 1px solid var(--line); padding: 1.4rem 1.5rem; margin-bottom: 1.25rem; }
-    .step-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.65rem; }
-    .step-num { font-family: var(--mono); color: var(--accent); font-size: 0.76rem; letter-spacing: 0.08em; text-transform: uppercase; }
+    .step-card { background: var(--card); border: 1px solid var(--line); padding: 1.35rem 1.45rem; margin-bottom: 1.15rem; }
+    .step-head { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem; flex-wrap: wrap; }
+    .step-num { font-family: var(--mono); color: var(--accent); font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; }
+    .badges { display: flex; gap: 0.4rem; align-items: center; }
+    .impl-tag { font-family: var(--mono); font-size: 0.66rem; padding: 2px 6px; border: 1px solid var(--line); color: var(--muted); background: var(--paper-alt); }
     .step-badge { font-family: var(--mono); font-size: 0.7rem; padding: 2px 8px; border: 1px solid var(--line); color: var(--muted); background: var(--paper); }
+    .step-badge.ready { border-color: var(--amber); color: var(--amber); background: #FBF4E4; }
     .step-badge.done { border-color: var(--pine); color: var(--pine); background: #E9F3EE; }
-    h2 { font-family: var(--serif); font-weight: 600; font-size: 1.18rem; margin-bottom: 0.4rem; }
-    p.desc { font-size: 0.87rem; color: var(--muted); margin-bottom: 1rem; }
+
+    h2 { font-family: var(--serif); font-weight: 600; font-size: 1.16rem; margin-bottom: 0.38rem; }
+    p.desc { font-size: 0.86rem; color: var(--muted); margin-bottom: 0.95rem; }
     code { font-family: var(--mono); font-size: 0.84em; background: var(--paper-alt); padding: 0.08rem 0.28rem; border: 1px solid var(--line); }
 
-    .row { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; margin-bottom: 0.75rem; }
-    select, input { background: var(--paper); border: 1px solid var(--line); color: var(--ink); padding: 0.48rem 0.65rem; font-size: 0.84rem; font-family: var(--sans); }
-    button { background: var(--ink); color: var(--paper); border: 1px solid var(--ink); padding: 0.5rem 0.95rem; font-size: 0.82rem; font-weight: 500; cursor: pointer; transition: all 0.12s; }
+    .row { display: flex; flex-wrap: wrap; gap: 0.55rem; align-items: center; margin-bottom: 0.65rem; }
+    select, input { background: var(--paper); border: 1px solid var(--line); color: var(--ink); padding: 0.48rem 0.65rem; font-size: 0.84rem; font-family: var(--sans); max-width: 100%; }
+    select:disabled, input:disabled { opacity: 0.55; cursor: not-allowed; }
+    button { background: var(--ink); color: var(--paper); border: 1px solid var(--ink); padding: 0.5rem 0.92rem; font-size: 0.81rem; font-weight: 500; cursor: pointer; transition: all 0.12s; }
     button:hover:not(:disabled) { background: var(--accent); border-color: var(--accent); }
-    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    button:disabled { opacity: 0.38; cursor: not-allowed; }
     button.secondary { background: transparent; color: var(--ink); border-color: var(--line); }
     button.secondary:hover:not(:disabled) { border-color: var(--ink); background: var(--paper-alt); }
+    button.danger { background: transparent; color: var(--accent); border-color: var(--accent); padding: 0.36rem 0.75rem; font-size: 0.78rem; }
+    button.danger:hover:not(:disabled) { background: var(--accent); color: #fff; }
 
-    .kv { background: var(--paper); border: 1px solid var(--line); padding: 0.75rem; font-family: var(--mono); font-size: 0.74rem; word-break: break-all; margin-top: 0.6rem; }
+    .kv { background: var(--paper); border: 1px solid var(--line); padding: 0.75rem; font-family: var(--mono); font-size: 0.73rem; word-break: break-all; margin-top: 0.55rem; }
     .kv div { margin-bottom: 0.28rem; }
     .kv div:last-child { margin-bottom: 0; }
-    .kv span { color: var(--muted); }
+    .kv span.k { color: var(--muted); margin-right: 0.35rem; }
 
     /* Sticky Inspector */
-    .inspector { position: sticky; top: 1.5rem; background: var(--card); border: 1px solid var(--line); padding: 1.4rem; }
+    .inspector { position: sticky; top: 1.25rem; background: var(--card); border: 1px solid var(--line); padding: 1.35rem; }
     .art-row { display: flex; gap: 1rem; align-items: center; margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid var(--line); }
-    #demo-svg { width: 100px; height: 100px; border: 1px solid var(--line); background: #DDD6C7; flex-shrink: 0; }
-    .memo-bar { display: grid; grid-template-columns: 9% 8% 7% 20% 20% 36%; height: 22px; border: 1px solid var(--ink); font-family: var(--mono); font-size: 0.62rem; text-align: center; line-height: 20px; margin: 0.6rem 0; overflow: hidden; }
+    #demo-svg { width: 96px; height: 96px; border: 1px solid var(--line); background: #DDD6C7; flex-shrink: 0; }
+    .memo-bar { display: grid; grid-template-columns: 16% 10% 8% 20% 18% 28%; height: 24px; border: 1px solid var(--ink); font-family: var(--mono); font-size: 0.6rem; text-align: center; line-height: 22px; margin: 0.55rem 0; overflow: hidden; }
     .m-magic { background: var(--accent); color: #fff; }
     .m-prof { background: #D9D0BE; }
     .m-aid { background: #E6DFCF; }
     .m-root { background: #EFECE3; }
     .m-uri { background: var(--paper); color: var(--muted); }
 
-    .log { background: #151619; color: #D8DEE9; font-family: var(--mono); font-size: 0.73rem; padding: 0.85rem; height: 295px; overflow-y: auto; line-height: 1.5; margin-top: 0.75rem; }
-    .log .ok { color: #8FBCBB; }
-    .log .err { color: #BF616A; }
-    .log .hl { color: #EBCB8B; }
+    .log { background: #151619; color: #D8DEE9; font-family: var(--mono); font-size: 0.72rem; padding: 0.85rem; height: 310px; overflow-y: auto; line-height: 1.5; margin-top: 0.65rem; }
+    .log div { margin-bottom: 0.3rem; word-break: break-word; }
+    .log .ok { color: #8FBCBB; font-weight: 600; }
+    .log .err { color: #BF616A; font-weight: 600; }
+    .log .hl { color: #EBCB8B; font-weight: 600; }
+
+    /* Mobile / Narrow Sticky Feedback Bar */
+    .mobile-toast {
+      display: none;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #151619;
+      color: #ECEFF4;
+      border-top: 2px solid var(--accent);
+      padding: 0.6rem 1rem;
+      font-family: var(--mono);
+      font-size: 0.73rem;
+      z-index: 50;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    @media (max-width: 940px) {
+      .mobile-toast { display: block; }
+    }
   </style>
 </head>
 <body>
+  <div class="proto-banner">
+    <strong>Research Prototype:</strong> Real <code>tachyon-zcash/ragu</code> PCD, Pallas ECDH &amp; AEAD executing over an <strong>in-memory simulated ledger</strong>. Not audited.
+  </div>
+
   <header>
     <a href="/" class="brand">
       <img src="/logo.png" onerror="this.onerror=null;this.src='logo.png'" alt="Zyoza Dumpling Logo" />
@@ -78,6 +153,9 @@
     <nav class="nav-links">
       <a href="/">← Overview</a>
       <a href="/whitepaper">Whitepaper</a>
+      <a href="/spec">Spec</a>
+      <a href="/security">Security</a>
+      <button id="btn-reset" class="danger" onclick="doReset()">Reset Session</button>
     </nav>
   </header>
 
@@ -86,20 +164,23 @@
       <!-- STEP 1: GOVERNED MINT -->
       <div class="step-card">
         <div class="step-head">
-          <span class="step-num">Step 01 · Governed Mint &amp; 512B Orchard Seal</span>
-          <span id="badge-1" class="step-badge">Ready</span>
+          <span class="step-num">Step 01 · Governed Mint &amp; 512B ZIP 302 Seal</span>
+          <div class="badges">
+            <span class="impl-tag">Crypto: Real · Ledger: In-Memory</span>
+            <span id="badge-1" class="step-badge ready">Ready</span>
+          </div>
         </div>
         <h2>Mint a Shielded Specimen (<code>CollectionSpec</code>)</h2>
-        <p class="desc">Derives ZIP 227 <code>AssetId</code> + Pallas <code>AssetBase</code>, encrypts the payload out-of-band, and consumes deterministic anti-duplicate nullifiers (<code>NF_aid</code>, <code>NF_idx</code>, <code>NF_med</code>).</p>
+        <p class="desc">Derives ZIP 227 <code>AssetDigest</code> + Pallas <code>AssetBase</code>, seals encrypted state under <code>ChaCha20Poly1305</code>, seeds Ragu <code>MintCircuit</code>, and records deterministic anti-duplicate nullifiers (<code>NF_aid</code>, <code>NF_idx</code>, <code>NF_med</code>) in the simulated ledger.</p>
         <div class="row">
-          <select id="preset" onchange="renderPresetArt()">
+          <select id="preset" onchange="onPresetChange()">
             <option value="nounz-venetian">Nounz Dumpling — Venetian Gold (⌐≡-≡)</option>
             <option value="nounz-mesh">Nounz Terminal — Stealth Mesh (⌐▓-▓)</option>
             <option value="nounz-ovk">Nounz Cypher Hood — OVK Peek (⌐≡-◨)</option>
             <option value="lootz-kit">Lootz Bag #07 — Dumpling Syndicate Kit</option>
           </select>
           <input id="slot-idx" type="number" value="1" min="1" max="100" style="width:82px" title="Token Slot (1..=100)" />
-          <button onclick="doMint()">Mint Shielded Zyoza</button>
+          <button id="btn-mint" onclick="doMint()">Mint Shielded Zyoza</button>
           <button id="btn-dup" class="secondary" onclick="doDuplicateAttack()" disabled>Test Duplicate Mint Attack</button>
         </div>
         <div id="out-1" class="kv" style="display:none"></div>
@@ -109,14 +190,18 @@
       <div class="step-card">
         <div class="step-head">
           <span class="step-num">Step 02 · Out-of-Band Key Handover (Alice → Bob)</span>
-          <span id="badge-2" class="step-badge">Locked</span>
+          <div class="badges">
+            <span class="impl-tag">Pallas ECDH + HKDF: Real</span>
+            <span id="badge-2" class="step-badge">Locked</span>
+          </div>
         </div>
         <h2>Transfer &amp; Re-Wrap 32B DEK via Pallas ECDH</h2>
-        <p class="desc">Spends Alice's Orchard single-use seal nullifier and re-wraps the <code>ChaCha20Poly1305</code> DEK for Bob's Pallas public key without re-uploading encrypted media.</p>
+        <p class="desc">Retires Alice's seal in the in-memory ledger and re-wraps the 32-byte <code>ChaCha20Poly1305</code> DEK for Bob's Pallas public key without re-uploading encrypted media. Test decryption under each actor's key anytime after mint.</p>
         <div class="row">
           <button id="btn-xfer" onclick="doTransfer()" disabled>Transfer Alice → Bob</button>
           <button id="btn-dec-alice" class="secondary" onclick="tryDecrypt('alice')" disabled>Decrypt as Alice</button>
           <button id="btn-dec-bob" class="secondary" onclick="tryDecrypt('bob')" disabled>Decrypt as Bob</button>
+          <button id="btn-dec-carol" class="secondary" onclick="tryDecrypt('carol')" disabled>Decrypt as Carol</button>
         </div>
         <div id="out-2" class="kv" style="display:none"></div>
       </div>
@@ -124,48 +209,58 @@
       <!-- STEP 3: RAGU NON-UNIFORM PCD -->
       <div class="step-card">
         <div class="step-head">
-          <span class="step-num">Step 03 · Ragu Non-Uniform PCD Lineage Folding</span>
-          <span id="badge-3" class="step-badge">Locked</span>
+          <span class="step-num">Step 03 · Ragu Non-Uniform Recursive PCD</span>
+          <div class="badges">
+            <span class="impl-tag">tachyon-zcash/ragu: Real</span>
+            <span id="badge-3" class="step-badge">Locked</span>
+          </div>
         </div>
-        <h2>Fold Heterogeneous Subcircuits in Constant Size</h2>
-        <p class="desc">Fold royalty enforcement, anonymous event check-ins (<code>TKT1</code>), and gear upgrades (<code>GAM1</code>) into one constant-size recursive proof—hiding all past owners.</p>
+        <h2>Fold Heterogeneous Subcircuits via <code>Application::fuse</code></h2>
+        <p class="desc">Recursively fuses real Ragu <code>Step&lt;Pasta&gt;</code> subcircuits—including the in-circuit boolean <code>RoyaltyCircuit</code> gate, Poseidon <code>TicketCheckInCircuit</code> (<code>TKT1</code>), and <code>UpgradeCircuit</code> (<code>GAM1</code>)—and verifies via <code>verify_compressed</code>.</p>
         <div class="row">
-          <button id="btn-fold-royalty" onclick="doFold('RoyaltyStep', 'NFT1')" disabled>+ Fold RoyaltyStep (NFT1)</button>
+          <button id="btn-fold-royalty" onclick="doFold('RoyaltyStep', 'NFT1')" disabled>+ Fold RoyaltyCircuit (NFT1)</button>
           <button id="btn-fold-ticket" class="secondary" onclick="doFold('TicketCheckInStep', 'TKT1')" disabled>+ Fold TicketCheckIn (TKT1)</button>
-          <button id="btn-fold-upgrade" class="secondary" onclick="doFold('AttributeUpgradeStep', 'GAM1')" disabled>+ Fold UpgradeStep (GAM1)</button>
+          <button id="btn-fold-upgrade" class="secondary" onclick="doFold('AttributeUpgradeStep', 'GAM1')" disabled>+ Fold UpgradeCircuit (GAM1)</button>
         </div>
         <div id="out-3" class="kv" style="display:none"></div>
       </div>
 
-      <!-- STEP 4: OVK DISCLOSURE & HALO2 GALLERY LISTING -->
+      <!-- STEP 4: OVK DISCLOSURE & MERKLE ZK OWNERSHIP -->
       <div class="step-card">
         <div class="step-head">
-          <span class="step-num">Step 04 · Selective Disclosure (<code>OVK</code>) &amp; Halo2 Proof</span>
-          <span id="badge-4" class="step-badge">Locked</span>
+          <span class="step-num">Step 04 · Server OVK Preview &amp; Poseidon-Merkle Ownership</span>
+          <div class="badges">
+            <span class="impl-tag">Ragu Merkle ZK: Real</span>
+            <span id="badge-4" class="step-badge">Locked</span>
+          </div>
         </div>
-        <h2>List Privately with a Halo2 Pasta Ownership Badge</h2>
-        <p class="desc">Share a per-object <code>ObjectViewingKey</code> + Halo2 ZK proof to unlock only this item on the gallery while keeping your Zcash wallet completely dark.</p>
+        <h2>List Privately with a Collection Merkle Inclusion Proof</h2>
+        <p class="desc">Queries the server with or without the per-object <code>ObjectViewingKey</code>, then proves depth-4 Poseidon Merkle inclusion + owner secret preimage against a fresh random verifier challenge.</p>
         <div class="row">
-          <button id="btn-toggle-ovk" class="secondary" onclick="toggleOvkPreview()" disabled>Toggle: Shielded vs OVK View</button>
-          <input id="reserve-zats" type="number" value="50000000" style="width:140px" title="Reserve (zatoshis)" />
-          <button id="btn-list" onclick="doListGallery()" disabled>Prove Halo2 &amp; List on Gallery</button>
+          <button id="btn-toggle-ovk" class="secondary" onclick="toggleOvkPreview()" disabled>Server Preview: Toggle OVK</button>
+          <input id="reserve-zats" type="number" value="50000000" style="width:140px" title="Reserve (zatoshis)" disabled />
+          <button id="btn-list" onclick="doListGallery()" disabled>Prove Merkle Ownership &amp; List</button>
         </div>
         <div id="out-4" class="kv" style="display:none"></div>
       </div>
 
-      <!-- STEP 5: SEALED-BID DARK-POOL AUCTION -->
+      <!-- STEP 5: COMMIT-REVEAL SEALED-BID AUCTION -->
       <div class="step-card">
         <div class="step-head">
-          <span class="step-num">Step 05 · Sealed-Bid Shielded ZEC Auction</span>
-          <span id="badge-5" class="step-badge">Locked</span>
+          <span class="step-num">Step 05 · Commit-Reveal Sealed-Bid Auction</span>
+          <div class="badges">
+            <span class="impl-tag">Commit-Reveal: Real · ZEC Settlement: Simulated</span>
+            <span id="badge-5" class="step-badge">Locked</span>
+          </div>
         </div>
-        <h2>Submit Blinded ZEC Bids &amp; Clear Without Front-Running</h2>
-        <p class="desc">Collectors submit sealed ZEC commitments; losing bids remain private and the highest bid ≥ reserve wins.</p>
+        <h2>Commit Salted Hash → Reveal Bid → Clear &amp; Transfer DEK</h2>
+        <p class="desc">Commits <code>BLAKE2b-256(listing || bidder || zats || salt)</code> so <code>GET /api/listings</code> hides bid values until reveal. Clearing settles the highest revealed bid ≥ reserve and re-wraps the OOB DEK to the winner.</p>
         <div class="row">
-          <input id="bidder-name" value="carol" style="width:100px" />
-          <input id="bid-zats" type="number" value="85000000" style="width:130px" />
-          <button id="btn-bid" onclick="doBid()" disabled>Submit Sealed Bid</button>
-          <button id="btn-clear" class="secondary" onclick="doClear()" disabled>Clear Auction</button>
+          <input id="bidder-name" value="carol" style="width:96px" title="Bidder ID" disabled />
+          <input id="bid-zats" type="number" value="85000000" style="width:130px" title="Bid (zatoshis)" disabled />
+          <button id="btn-bid-commit" onclick="doCommitBid()" disabled>1. Commit Salted Bid</button>
+          <button id="btn-bid-reveal" class="secondary" onclick="doRevealBid()" disabled>2. Reveal Bid</button>
+          <button id="btn-clear" class="secondary" onclick="doClear()" disabled>3. Clear &amp; Transfer</button>
         </div>
         <div id="out-5" class="kv" style="display:none"></div>
       </div>
@@ -173,13 +268,16 @@
       <!-- STEP 6: ZSA CRYSTALLIZATION -->
       <div class="step-card">
         <div class="step-head">
-          <span class="step-num">Step 06 · Burn-to-Crystallize into Native ZSA</span>
-          <span id="badge-6" class="step-badge">Locked</span>
+          <span class="step-num">Step 06 · Burn-to-Crystallize into Stage II ZSA</span>
+          <div class="badges">
+            <span class="impl-tag">2-of-3 Schnorr: Real · ZSA Ledger: Simulated</span>
+            <span id="badge-6" class="step-badge">Locked</span>
+          </div>
         </div>
-        <h2>1:1 Upgrade via Halo2 Migration + 2-of-3 Pallas FROST</h2>
-        <p class="desc">Retires the Stage I Orchard memo seal and mints a native ZIP 226/227 <code>ZsaNote</code> (<code>value = 1</code>, finalized supply) with the exact same <code>AssetId</code> &amp; <code>AssetBase</code>.</p>
+        <h2>1:1 Upgrade via Halo2 Migration Proof + 2-of-3 Pallas Schnorr</h2>
+        <p class="desc">Proves Stage I migration, retires the Stage I seal, co-signs issuance with a <code>2-of-3</code> Pallas threshold committee (trusted-dealer setup), and mints a simulated Stage II <code>ZsaNote</code> (<code>value = 1</code>, finalized supply), permanently locking Stage I actions.</p>
         <div class="row">
-          <button id="btn-crys" onclick="doCrystallize()" disabled>Burn Orchard Seal &amp; Crystallize ZSA</button>
+          <button id="btn-crys" onclick="doCrystallize()" disabled>Burn Stage I Seal &amp; Crystallize ZSA</button>
         </div>
         <div id="out-6" class="kv" style="display:none"></div>
       </div>
@@ -191,42 +289,92 @@
         <svg id="demo-svg" viewBox="0 0 32 32" shape-rendering="crispEdges"></svg>
         <div>
           <div style="font-family:var(--mono);font-size:0.72rem;color:var(--accent)" id="insp-stage">STAGE: UNMINTED</div>
-          <div style="font-family:var(--serif);font-weight:600;font-size:1.12rem" id="insp-title">Nounz Dumpling (⌐≡-≡)</div>
+          <div style="font-family:var(--serif);font-weight:600;font-size:1.1rem" id="insp-title">Nounz Dumpling (⌐≡-≡)</div>
           <div style="font-size:0.82rem;color:var(--muted)" id="insp-owner">Owner: —</div>
         </div>
       </div>
 
-      <div style="font-family:var(--mono);font-size:0.72rem;color:var(--muted)">512-BYTE ORCHARD MEMO SEAL ("ZYOZ")</div>
-      <div class="memo-bar" title="0..4 ZYOZ | 4..6 v1 | 6..10 Profile | 10..42 AssetId | 42..74 StateRoot | 140..512 OOB URI">
-        <div class="m-magic">ZYOZ</div>
+      <div style="font-family:var(--mono);font-size:0.71rem;color:var(--muted)">512-BYTE ZIP 302 BINARY SEAL (0xFF || "ZYOZ")</div>
+      <div class="memo-bar" title="0..5 [0xFF,'Z','Y','O','Z'] | 5..7 v1 | 7..11 Profile | 11..43 AssetId | 43..75 StateRoot | 75..512 Nonce + Hash + URI (437B)">
+        <div class="m-magic">0xFF·ZYOZ</div>
         <div class="m-prof" id="m-prof">NFT1</div>
         <div class="m-prof">v1</div>
-        <div class="m-aid">AssetId (32B)</div>
-        <div class="m-root">Root (32B)</div>
-        <div class="m-uri">Nonce + OOB URI (372B)</div>
+        <div class="m-aid">AssetId 32B</div>
+        <div class="m-root">Root 32B</div>
+        <div class="m-uri">Nonce+Hash+URI (437B)</div>
       </div>
 
-      <div style="font-family:var(--mono);font-size:0.72rem;color:var(--muted);margin-top:1rem">CRYPTOGRAPHIC TELEMETRY LOG</div>
-      <div id="log" class="log">
-        <div><span class="hl">[zyoza-studio]</span> Ready. Select a Nounz or Lootz specimen and click Mint.</div>
-      </div>
+      <div style="font-family:var(--mono);font-size:0.71rem;color:var(--muted);margin-top:0.95rem">CRYPTOGRAPHIC TELEMETRY LOG</div>
+      <div id="log" class="log" role="log" aria-live="polite"></div>
     </aside>
   </div>
 
-  <script>
-    let S = { sessionId: null, assetId: null, assetBase: null, owner: null, ovkOpen: false, listingId: null, hops: 0 };
+  <div id="mobile-toast" class="mobile-toast">[zyoza-studio] Ready. Select a specimen and click Mint.</div>
 
-    function log(msg, cls = '') {
-      const el = document.getElementById('log');
-      const d = document.createElement('div');
-      if (cls) d.className = cls;
-      d.innerHTML = msg;
-      el.appendChild(d);
-      el.scrollTop = el.scrollHeight;
+  <script>
+    const INITIAL_STATE = () => ({
+      sessionId: null,
+      mintedPreset: null,
+      assetId: null,
+      assetBase: null,
+      owner: null,
+      ovkOpen: false,
+      listingId: null,
+      hops: 0,
+      lastBid: null,
+      crystallized: false
+    });
+    let S = INITIAL_STATE();
+
+    function appendLog(prefix, detail, cls = '') {
+      const logBox = document.getElementById('log');
+      const row = document.createElement('div');
+      const tag = document.createElement('span');
+      if (cls) tag.className = cls;
+      tag.textContent = prefix + ' ';
+      const body = document.createElement('span');
+      body.textContent = detail;
+      row.appendChild(tag);
+      row.appendChild(body);
+      logBox.appendChild(row);
+      logBox.scrollTop = logBox.scrollHeight;
+
+      const toast = document.getElementById('mobile-toast');
+      toast.textContent = `${prefix} ${detail}`;
     }
 
-    function renderPresetArt() {
-      const p = document.getElementById('preset').value;
+    function renderKv(containerId, pairs) {
+      const box = document.getElementById(containerId);
+      box.textContent = '';
+      box.style.display = 'block';
+      for (const [k, v] of pairs) {
+        const line = document.createElement('div');
+        const ks = document.createElement('span');
+        ks.className = 'k';
+        ks.textContent = k + ':';
+        const vs = document.createElement('span');
+        vs.textContent = String(v);
+        line.appendChild(ks);
+        line.appendChild(vs);
+        box.appendChild(line);
+      }
+    }
+
+    function setBadge(id, text, stateCls = '') {
+      const el = document.getElementById(id);
+      el.textContent = text;
+      el.className = 'step-badge' + (stateCls ? ' ' + stateCls : '');
+    }
+
+    function onPresetChange() {
+      if (S.sessionId) {
+        document.getElementById('preset').value = S.mintedPreset;
+        return;
+      }
+      renderPresetArt(document.getElementById('preset').value);
+    }
+
+    function renderPresetArt(p) {
       const svg = document.getElementById('demo-svg');
       const titles = {
         'nounz-venetian': 'Nounz Dumpling (⌐≡-≡)',
@@ -234,7 +382,7 @@
         'nounz-ovk': 'Nounz Cypher Hood (⌐≡-◨)',
         'lootz-kit': 'Lootz Bag #07 (GAM1)'
       };
-      document.getElementById('insp-title').textContent = titles[p];
+      document.getElementById('insp-title').textContent = titles[p] || p;
       document.getElementById('m-prof').textContent = p === 'lootz-kit' ? 'GAM1' : 'NFT1';
 
       if (p === 'lootz-kit') {
@@ -307,7 +455,6 @@
       svg.innerHTML = `
         <rect width="32" height="32" fill="${bg}"/>
         ${headSvg}
-        <!-- 1-Unit Nouns Left Ear-Hook (⌐) + 1-Unit Bridge + Frames (shifted +1 right) -->
         <rect x="6" y="12" width="3" height="1" fill="${frame}"/>
         <rect x="6" y="13" width="1" height="2" fill="${frame}"/>
         <rect x="16" y="12" width="1" height="1" fill="${frame}"/>
@@ -319,195 +466,325 @@
     }
 
     async function api(path, body) {
+      if (location.protocol === 'file:') {
+        throw new Error('Opened as local file:// — start the Rust server (`cargo run -p zyoza-gallery-demo`) to execute real Ragu & Halo2 proofs.');
+      }
+      let res;
       try {
-        const res = await fetch(path, {
+        res = await fetch(path, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(body || {})
         });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || JSON.stringify(data));
-        return data;
-      } catch (e) {
-        if (location.protocol === 'file:') return offlineFallback(path, body);
-        throw e;
+      } catch (_) {
+        throw new Error('Cannot reach Zyoza server — run `cargo run -p zyoza-gallery-demo` and reload.');
       }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      return data;
     }
 
-    function rndHex(n) { return Array.from({length:n}, () => Math.floor(Math.random()*256).toString(16).padStart(2,'0')).join(''); }
-    let offlineSlots = new Set();
-    function offlineFallback(path, b) {
-      if (path === '/api/demo/mint') {
-        const key = `${b.preset}:${b.token_index}`;
-        if (offlineSlots.has(key) || b.token_index > 100 || b.token_index < 1) throw new Error('governed mint rejected: duplicate AssetId, slot index, or cap');
-        offlineSlots.add(key);
-        return { session_id: 'local-1', asset_id: rndHex(32), asset_base: rndHex(32), commitment: rndHex(32), oob_uri: 'mem://' + rndHex(16), ovk: rndHex(32), nullifiers: [rndHex(32), rndHex(32), rndHex(32)], pcd_bytes: 6279, pcd_steps: 1 };
+    async function doReset() {
+      try {
+        if (location.protocol !== 'file:') {
+          await api('/api/demo/reset', {});
+        }
+      } catch (e) {
+        appendLog('[warn]', e.message, 'err');
       }
-      if (path === '/api/demo/transfer') return { prev_spent: true, new_commitment: rndHex(32), new_oob_uri: 'mem://' + rndHex(16), owner: 'bob' };
-      if (path === '/api/demo/decrypt') {
-        if (b.actor !== S.owner) throw new Error('ChaCha20Poly1305 key unwrap failed for revoked/non-owner key');
-        return { decrypted_summary: `Authentic Zyoza payload (${S.assetId.slice(0,12)}...)` };
-      }
-      if (path === '/api/demo/fold') return { step_count: S.hops + 1, last_step: b.step_kind, ipa_bytes: 2112, json_bytes: 6280, verify_ms: 16, acc_hex: rndHex(32) };
-      if (path === '/api/demo/list') return { listing_id: 1, prove_ms: 680, verify_ms: 18, proof_bytes: 5935, title: document.getElementById('insp-title').textContent };
-      if (path === '/api/demo/crystallize') return { zsa_txid: rndHex(32), asset_id: S.assetId, asset_base: S.assetBase, frost_signers: 'Signers #1 & #3 (2-of-3 Pallas FROST)', value: 1, finalized: true };
+      S = INITIAL_STATE();
+      document.getElementById('preset').disabled = false;
+      document.getElementById('slot-idx').disabled = false;
+      document.getElementById('btn-mint').disabled = false;
+      [
+        'btn-dup', 'btn-xfer', 'btn-dec-alice', 'btn-dec-bob', 'btn-dec-carol',
+        'btn-fold-royalty', 'btn-fold-ticket', 'btn-fold-upgrade',
+        'btn-toggle-ovk', 'reserve-zats', 'btn-list',
+        'bidder-name', 'bid-zats', 'btn-bid-commit', 'btn-bid-reveal', 'btn-clear',
+        'btn-crys'
+      ].forEach(id => { document.getElementById(id).disabled = true; });
+      ['out-1', 'out-2', 'out-3', 'out-4', 'out-5', 'out-6'].forEach(id => {
+        const el = document.getElementById(id);
+        el.style.display = 'none';
+        el.textContent = '';
+      });
+      setBadge('badge-1', 'Ready', 'ready');
+      ['badge-2', 'badge-3', 'badge-4', 'badge-5', 'badge-6'].forEach(id => setBadge(id, 'Locked'));
+      document.getElementById('insp-stage').textContent = 'STAGE: UNMINTED';
+      document.getElementById('insp-owner').textContent = 'Owner: —';
+      renderPresetArt(document.getElementById('preset').value);
+      appendLog('[reset]', 'Session & in-memory settlement ledgers reset.', 'hl');
     }
 
     async function doMint() {
       const preset = document.getElementById('preset').value;
       const token_index = Number(document.getElementById('slot-idx').value);
+      appendLog('[mint]', `Seeding Ragu MintCircuit & sealing slot #${token_index}...`, 'hl');
       try {
         const r = await api('/api/demo/mint', { preset, token_index });
-        S.sessionId = r.session_id; S.assetId = r.asset_id; S.assetBase = r.asset_base; S.owner = 'alice'; S.hops = 1;
-        document.getElementById('out-1').style.display = 'block';
-        document.getElementById('out-1').innerHTML = `
-          <div><span>AssetId (ZIP 227):</span> ${r.asset_id}</div>
-          <div><span>AssetBase (Pallas):</span> ${r.asset_base}</div>
-          <div><span>Mint Nullifiers (3):</span> ${r.nullifiers[0].slice(0,18)}… (aid, idx #${token_index}, media)</div>
-          <div><span>OOB URI:</span> ${r.oob_uri}</div>`;
-        document.getElementById('badge-1').textContent = 'Anchored'; document.getElementById('badge-1').className = 'step-badge done';
-        document.getElementById('insp-stage').textContent = 'STAGE I: ORCHARD SEAL';
-        document.getElementById('insp-owner').textContent = 'Owner: Alice (Shielded)';
-        ['btn-dup','btn-xfer','btn-dec-alice','btn-dec-bob','btn-fold-royalty','btn-fold-ticket','btn-fold-upgrade','btn-toggle-ovk','btn-list','btn-crys'].forEach(id => document.getElementById(id).disabled = false);
-        ['badge-2','badge-3','badge-4','badge-6'].forEach(id => document.getElementById(id).textContent = 'Ready');
-        log(`<span class="ok">✓ Minted</span> slot #${token_index} → AssetId <code>${r.asset_id.slice(0,16)}…</code> (512B ZYOZ memo anchored)`);
+        S.sessionId = r.session_id;
+        S.mintedPreset = preset;
+        S.assetId = r.asset_id;
+        S.assetBase = r.asset_base;
+        S.owner = 'alice';
+        S.hops = r.pcd_steps;
+
+        document.getElementById('preset').disabled = true;
+        document.getElementById('slot-idx').disabled = true;
+        document.getElementById('btn-mint').disabled = true;
+        document.getElementById('btn-dup').disabled = false;
+
+        // Unlock Step 2 sequentially + decrypt buttons
+        ['btn-xfer', 'btn-dec-alice', 'btn-dec-bob', 'btn-dec-carol'].forEach(id => {
+          document.getElementById(id).disabled = false;
+        });
+        setBadge('badge-1', 'Minted (Sim Ledger)', 'done');
+        setBadge('badge-2', 'Ready', 'ready');
+
+        document.getElementById('insp-stage').textContent = 'STAGE I: IN-MEMORY SEAL';
+        document.getElementById('insp-owner').textContent = 'Owner: alice (DEK wrapped)';
+
+        renderKv('out-1', [
+          ['AssetId (ZIP 227 [0..32])', r.asset_id],
+          ['AssetBase (Pallas GroupHash)', r.asset_base],
+          ['Mint Nullifiers (3)', `${r.nullifiers[0].slice(0, 20)}… (NF_aid, NF_idx #${token_index}, NF_med)`],
+          ['Ragu Seed Proof', `${r.compressed_proof_bytes} B CompressedProof<Pasta> (step #1)`],
+          ['OOB Envelope URI', r.oob_uri]
+        ]);
+        appendLog('✓ Minted', `slot #${token_index} (${r.compressed_proof_bytes}B Ragu seed proof; simulated seal recorded)`, 'ok');
       } catch (e) {
-        log(`<span class="err">✗ Mint Rejected:</span> ${e.message}`);
+        appendLog('✗ Mint Rejected:', e.message, 'err');
       }
     }
 
     async function doDuplicateAttack() {
-      const preset = document.getElementById('preset').value;
+      const preset = S.mintedPreset || document.getElementById('preset').value;
       const token_index = Number(document.getElementById('slot-idx').value);
       try {
         await api('/api/demo/mint', { preset, token_index });
       } catch (e) {
-        log(`<span class="ok">✓ CollectionSpec Blocked Attack:</span> ${e.message}`);
+        appendLog('✓ Duplicate Blocked:', e.message, 'ok');
       }
     }
 
     async function doTransfer() {
       try {
         const r = await api('/api/demo/transfer', { session_id: S.sessionId });
-        S.owner = 'bob';
-        document.getElementById('out-2').style.display = 'block';
-        document.getElementById('out-2').innerHTML = `
-          <div><span>Prior Alice Seal:</span> SPENT (nullifier revealed)</div>
-          <div><span>New Bob Commitment:</span> ${r.new_commitment}</div>
-          <div><span>Re-Wrapped OOB:</span> ${r.new_oob_uri}</div>`;
-        document.getElementById('badge-2').textContent = 'Transferred'; document.getElementById('badge-2').className = 'step-badge done';
-        document.getElementById('insp-owner').textContent = 'Owner: Bob (Shielded)';
+        S.owner = r.owner;
+        renderKv('out-2', [
+          ['Prior Alice Seal', 'Retired in simulated OrchardSealAdapter'],
+          ['New Bob Commitment', r.new_commitment],
+          ['Re-Wrapped OOB URI', r.new_oob_uri]
+        ]);
         document.getElementById('btn-xfer').disabled = true;
-        log(`<span class="ok">✓ Transferred Alice → Bob:</span> Pallas ECDH 32B DEK re-wrapped; Alice's seal retired.`);
-      } catch (e) { log(`<span class="err">✗ ${e.message}</span>`); }
+        setBadge('badge-2', 'Transferred → bob', 'done');
+        document.getElementById('insp-owner').textContent = `Owner: ${r.owner} (DEK wrapped)`;
+
+        // Sequentially unlock Step 3 (Ragu Fold)
+        ['btn-fold-royalty', 'btn-fold-ticket', 'btn-fold-upgrade'].forEach(id => {
+          document.getElementById(id).disabled = false;
+        });
+        setBadge('badge-3', 'Ready', 'ready');
+
+        appendLog('✓ Transferred:', '32B ChaCha20Poly1305 DEK re-wrapped via Pallas ECDH to bob (try Decrypt as Alice vs Bob).', 'ok');
+      } catch (e) {
+        appendLog('✗ Transfer Error:', e.message, 'err');
+      }
     }
 
     async function tryDecrypt(actor) {
       try {
         const r = await api('/api/demo/decrypt', { session_id: S.sessionId, actor });
-        log(`<span class="ok">✓ Decrypt (${actor}):</span> ${r.decrypted_summary}`);
+        appendLog(`✓ Decrypt (${actor}):`, r.decrypted_summary, 'ok');
       } catch (e) {
-        log(`<span class="err">✗ Decrypt Denied (${actor}):</span> ${e.message}`);
+        appendLog(`✗ Decrypt Denied (${actor}):`, e.message, 'err');
       }
     }
 
     async function doFold(step_kind, profile_id) {
-      log(`… Folding <code>${step_kind}</code> (${profile_id}) into Ragu PCD...`);
+      appendLog('… Ragu Fuse:', `Folding ${step_kind} (${profile_id}) via Application::fuse + compress...`, 'hl');
       try {
         const r = await api('/api/demo/fold', { session_id: S.sessionId, step_kind, profile_id });
         S.hops = r.step_count;
-        document.getElementById('out-3').style.display = 'block';
-        document.getElementById('out-3').innerHTML = `
-          <div><span>Folded Lineage Depth:</span> ${r.step_count} hops (latest: ${r.last_step} / ${profile_id})</div>
-          <div><span>Accumulator:</span> ${r.acc_hex}</div>
-          <div><span>Raw IPA Proof Size:</span> ${r.ipa_bytes} B (constant O(1) size! Verified in ${r.verify_ms} ms)</div>`;
-        document.getElementById('badge-3').textContent = `${r.step_count} Hops Folded`; document.getElementById('badge-3').className = 'step-badge done';
-        log(`<span class="ok">✓ Ragu PCD Fold #${r.step_count}:</span> ${step_kind} verified in ${r.verify_ms}ms (${r.ipa_bytes}B constant IPA proof)`);
-      } catch (e) { log(`<span class="err">✗ ${e.message}</span>`); }
+        renderKv('out-3', [
+          ['Recursive Depth', `${r.step_count} steps folded (latest: ${r.last_step} / ${profile_id})`],
+          ['Lineage Accumulator', r.header_hex],
+          ['CompressedProof<Pasta>', `${r.compressed_proof_bytes} B (constant size; verify_compressed = ${r.verify_ms} ms)`]
+        ]);
+        setBadge('badge-3', `${r.step_count} Steps Folded`, 'done');
+
+        // Sequentially unlock Step 4 (OVK + Listing) if not already listed/crystallized
+        if (!S.listingId && !S.crystallized) {
+          ['btn-toggle-ovk', 'reserve-zats', 'btn-list'].forEach(id => {
+            document.getElementById(id).disabled = false;
+          });
+          setBadge('badge-4', 'Ready', 'ready');
+        }
+
+        appendLog(`✓ Ragu Fold #${r.step_count}:`, `${step_kind} fused & verified in ${r.verify_ms} ms (${r.compressed_proof_bytes} B CompressedProof)`, 'ok');
+      } catch (e) {
+        appendLog('✗ Ragu Fold Error:', e.message, 'err');
+      }
     }
 
-    function toggleOvkPreview() {
-      S.ovkOpen = !S.ovkOpen;
-      document.getElementById('out-4').style.display = 'block';
-      if (S.ovkOpen) {
-        document.getElementById('out-4').innerHTML = `<div><span>Preview (With OVK):</span> <strong>${document.getElementById('insp-title').textContent}</strong> — Traits &amp; provenance selectively disclosed.</div>`;
-        log(`<span class="hl">• OVK Applied:</span> Item metadata selectively revealed without exposing wallet FVK.`);
-      } else {
-        document.getElementById('out-4').innerHTML = `<div><span>Preview (No OVK):</span> <strong>Shielded Zyoza NFT</strong> — "{}" (opaque on-chain)</div>`;
-        log(`<span>• OVK Withheld:</span> Public observers see only opaque ciphertext.`);
+    async function toggleOvkPreview() {
+      const nextUseOvk = !S.ovkOpen;
+      try {
+        const r = await api('/api/demo/preview', { session_id: S.sessionId, use_ovk: nextUseOvk });
+        S.ovkOpen = nextUseOvk;
+        renderKv('out-4', [
+          ['OVK Mode', S.ovkOpen ? 'ObjectViewingKey Disclosed' : 'Withheld (Public Observer View)'],
+          ['Server Title', r.title],
+          ['Server Summary', r.summary],
+          ['Attributes JSON', r.attributes_json]
+        ]);
+        appendLog(
+          S.ovkOpen ? '• OVK Disclosed:' : '• OVK Withheld:',
+          `${r.title} — ${r.summary}`,
+          S.ovkOpen ? 'hl' : ''
+        );
+      } catch (e) {
+        appendLog('✗ Preview Error:', e.message, 'err');
       }
     }
 
     async function doListGallery() {
       const reserve_zatoshis = Number(document.getElementById('reserve-zats').value);
-      log(`… Generating Halo2 Pasta ZK Ownership Proof (k=6)...`);
+      appendLog('… Proving Ownership:', 'Running Ragu OwnershipMerkleCircuit (depth-4 Poseidon Merkle + fresh challenge)...', 'hl');
       try {
         const r = await api('/api/demo/list', { session_id: S.sessionId, reserve_zatoshis });
         S.listingId = r.listing_id;
-        document.getElementById('out-4').style.display = 'block';
-        document.getElementById('out-4').innerHTML = `
-          <div><span>Gallery Listing:</span> #${r.listing_id} (${r.title}) — <strong>ZK Ownership Verified ✓</strong></div>
-          <div><span>Halo2 Pasta IPA:</span> ${r.proof_bytes} B | prove=${r.prove_ms}ms | verify=${r.verify_ms}ms</div>`;
-        document.getElementById('badge-4').textContent = 'Listed #' + r.listing_id; document.getElementById('badge-4').className = 'step-badge done';
-        document.getElementById('badge-5').textContent = 'Open';
-        document.getElementById('btn-bid').disabled = false;
-        document.getElementById('btn-clear').disabled = false;
-        log(`<span class="ok">✓ Listed #${r.listing_id}:</span> Halo2 proof verified in ${r.verify_ms}ms.`);
-      } catch (e) { log(`<span class="err">✗ ${e.message}</span>`); }
+        renderKv('out-4', [
+          ['Gallery Listing', `#${r.listing_id} (${r.title}) — Poseidon-Merkle Ownership Verified ✓`],
+          ['Collection Merkle Root', r.collection_root_hex],
+          ['Fresh Verifier Challenge', r.challenge_hex],
+          ['Ragu CompressedProof', `${r.proof_bytes} B | prove=${r.prove_ms} ms | verify=${r.verify_ms} ms`]
+        ]);
+        document.getElementById('btn-list').disabled = true;
+        document.getElementById('reserve-zats').disabled = true;
+        setBadge('badge-4', `Listed #${r.listing_id}`, 'done');
+
+        // Sequentially unlock Step 5 (Commit Bid)
+        ['bidder-name', 'bid-zats', 'btn-bid-commit'].forEach(id => {
+          document.getElementById(id).disabled = false;
+        });
+        setBadge('badge-5', 'Commit Open', 'ready');
+
+        appendLog(`✓ Listed #${r.listing_id}:`, `Poseidon-Merkle ownership proof (${r.proof_bytes} B) verified in ${r.verify_ms} ms.`, 'ok');
+      } catch (e) {
+        appendLog('✗ Listing Error:', e.message, 'err');
+      }
     }
 
-    async function doBid() {
-      const bidder_id = document.getElementById('bidder-name').value || 'carol';
+    async function doCommitBid() {
+      const bidder_id = (document.getElementById('bidder-name').value || 'carol').trim();
       const bid_zatoshis = Number(document.getElementById('bid-zats').value);
       try {
-        if (location.protocol !== 'file:') {
-          const res = await fetch(`/api/listings/${S.listingId}/bids`, {
-            method: 'POST', headers: {'content-type': 'application/json'},
-            body: JSON.stringify({ bidder_id, shielded_zec_commitment: Array(32).fill(9), bid_zatoshis })
-          });
-          if (!res.ok) throw new Error(await res.text());
-        }
-        document.getElementById('out-5').style.display = 'block';
-        document.getElementById('out-5').innerHTML = `<div><span>Latest Sealed Bid:</span> ${bidder_id} committed ${bid_zatoshis.toLocaleString()} zatoshis (shielded)</div>`;
-        log(`<span class="ok">✓ Sealed Bid:</span> ${bidder_id} (${bid_zatoshis.toLocaleString()} zats) recorded.`);
-      } catch (e) { log(`<span class="err">✗ ${e.message}</span>`); }
+        const r = await api('/api/demo/bid-commit', { session_id: S.sessionId, bidder_id, bid_zatoshis });
+        S.lastBid = { bidder_id, bid_zatoshis, salt_hex: r.salt_hex, commitment_hex: r.commitment_hex };
+
+        // Inspect GET /api/listings to verify bid value is hidden on the wire!
+        const pubRes = await fetch('/api/listings');
+        const pubListings = await pubRes.json();
+        const curListing = pubListings.find(l => l.listing_id === S.listingId);
+        const wireBid = curListing ? curListing.sealed_bids[curListing.sealed_bids.length - 1] : null;
+        const hiddenCheck = wireBid && wireBid.revealed_zatoshis === null ? 'null (hidden on GET /api/listings)' : 'visible';
+
+        renderKv('out-5', [
+          ['Committed Bidder', r.bidder_id],
+          ['BLAKE2b Commitment', r.commitment_hex],
+          ['Client Secret Salt', r.salt_hex],
+          ['Wire Amount Before Reveal', hiddenCheck]
+        ]);
+        document.getElementById('btn-bid-reveal').disabled = false;
+        setBadge('badge-5', 'Committed (Hidden)', 'ready');
+        appendLog('✓ Bid Committed:', `${bidder_id} committed salted hash; GET /api/listings shows revealed_zatoshis = null.`, 'ok');
+      } catch (e) {
+        appendLog('✗ Commit Error:', e.message, 'err');
+      }
+    }
+
+    async function doRevealBid() {
+      if (!S.lastBid) return;
+      try {
+        await api('/api/demo/bid-reveal', {
+          session_id: S.sessionId,
+          bidder_id: S.lastBid.bidder_id,
+          bid_zatoshis: S.lastBid.bid_zatoshis,
+          salt_hex: S.lastBid.salt_hex
+        });
+        renderKv('out-5', [
+          ['Revealed Bidder', S.lastBid.bidder_id],
+          ['Verified Bid Amount', `${S.lastBid.bid_zatoshis.toLocaleString()} zatoshis`],
+          ['Commitment Verified', `${S.lastBid.commitment_hex.slice(0, 24)}… ✓`]
+        ]);
+        document.getElementById('btn-bid-reveal').disabled = true;
+        document.getElementById('btn-clear').disabled = false;
+        setBadge('badge-5', 'Revealed', 'ready');
+        appendLog('✓ Bid Revealed:', `${S.lastBid.bidder_id} revealed ${S.lastBid.bid_zatoshis.toLocaleString()} zats matching BLAKE2b commitment.`, 'ok');
+      } catch (e) {
+        appendLog('✗ Reveal Error:', e.message, 'err');
+      }
     }
 
     async function doClear() {
       try {
-        let r;
-        if (location.protocol === 'file:') {
-          r = { winning_bidder: document.getElementById('bidder-name').value, clearing_price_zatoshis: Number(document.getElementById('bid-zats').value) };
-        } else {
-          const res = await fetch(`/api/listings/${S.listingId}/clear`, { method: 'POST' });
-          if (!res.ok) throw new Error(await res.text());
-          r = await res.json();
-        }
+        const r = await api('/api/demo/clear', { session_id: S.sessionId });
         S.owner = r.winning_bidder;
-        document.getElementById('out-5').innerHTML = `<div><span>Cleared Winner:</span> <strong>${r.winning_bidder}</strong> at ${r.clearing_price_zatoshis.toLocaleString()} zatoshis</div>`;
-        document.getElementById('badge-5').textContent = 'Cleared'; document.getElementById('badge-5').className = 'step-badge done';
-        document.getElementById('insp-owner').textContent = `Owner: ${r.winning_bidder} (Shielded)`;
-        log(`<span class="ok">✓ Auction Cleared:</span> Won by ${r.winning_bidder} (${r.clearing_price_zatoshis.toLocaleString()} zats).`);
-      } catch (e) { log(`<span class="err">✗ ${e.message}</span>`); }
+        renderKv('out-5', [
+          ['Winning Bidder', r.winning_bidder],
+          ['Clearing Price', `${r.clearing_price_zatoshis.toLocaleString()} zatoshis (simulated ZEC settlement)`],
+          ['Transferred Commitment', r.new_commitment],
+          ['Winner Re-Wrapped OOB', r.new_oob_uri]
+        ]);
+        ['bidder-name', 'bid-zats', 'btn-bid-commit', 'btn-bid-reveal', 'btn-clear'].forEach(id => {
+          document.getElementById(id).disabled = true;
+        });
+        setBadge('badge-5', `Cleared → ${r.winning_bidder}`, 'done');
+        document.getElementById('insp-owner').textContent = `Owner: ${r.winning_bidder} (DEK wrapped)`;
+
+        // Sequentially unlock Step 6 (Crystallize)
+        document.getElementById('btn-crys').disabled = false;
+        setBadge('badge-6', 'Ready', 'ready');
+
+        appendLog('✓ Auction Cleared & Transferred:', `DEK re-wrapped to ${r.winning_bidder} (try "Decrypt as Carol" in Step 02!).`, 'ok');
+      } catch (e) {
+        appendLog('✗ Clear Error:', e.message, 'err');
+      }
     }
 
     async function doCrystallize() {
-      log(`… Proving Halo2 burn migration + signing 2-of-3 Pallas FROST ZSA issuance...`);
+      appendLog('… Crystallizing:', 'Proving Halo2 migration + signing 2-of-3 Pallas Schnorr ZSA issuance...', 'hl');
       try {
         const r = await api('/api/demo/crystallize', { session_id: S.sessionId });
-        document.getElementById('out-6').style.display = 'block';
-        document.getElementById('out-6').innerHTML = `
-          <div><span>Stage II Settlement:</span> Native OrchardZSA Note (value = ${r.value}, finalized = ${r.finalized})</div>
-          <div><span>Preserved AssetId:</span> ${r.asset_id}</div>
-          <div><span>FROST Threshold Auth:</span> ${r.frost_signers}</div>`;
-        document.getElementById('badge-6').textContent = 'Crystallized ZSA'; document.getElementById('badge-6').className = 'step-badge done';
-        document.getElementById('insp-stage').textContent = 'STAGE II: NATIVE ZSA';
-        document.getElementById('btn-crys').disabled = true;
-        log(`<span class="ok">✓ Crystallized to Native ZSA:</span> Stage I Orchard seal burned; identical AssetId live on OrchardZSA.`);
-      } catch (e) { log(`<span class="err">✗ ${e.message}</span>`); }
+        S.crystallized = true;
+        renderKv('out-6', [
+          ['Stage II Settlement', `Simulated OrchardZSA Note (value = ${r.value}, finalized = ${r.finalized})`],
+          ['Preserved AssetId', r.asset_id],
+          ['Preserved AssetBase', r.asset_base],
+          ['Threshold Issuer Auth', r.frost_signers],
+          ['Simulated ZSA TxId', r.zsa_txid]
+        ]);
+
+        // Lock ALL Stage I mutation controls permanently after crystallization!
+        [
+          'btn-dup', 'btn-xfer',
+          'btn-fold-royalty', 'btn-fold-ticket', 'btn-fold-upgrade',
+          'reserve-zats', 'btn-list',
+          'bidder-name', 'bid-zats', 'btn-bid-commit', 'btn-bid-reveal', 'btn-clear',
+          'btn-crys'
+        ].forEach(id => { document.getElementById(id).disabled = true; });
+
+        setBadge('badge-6', 'Crystallized (Sim ZSA)', 'done');
+        document.getElementById('insp-stage').textContent = 'STAGE II: SIMULATED ZSA NOTE';
+        appendLog('✓ Crystallized:', 'Stage I seal retired & locked; Stage II ZSA note minted with identical AssetId.', 'ok');
+      } catch (e) {
+        appendLog('✗ Crystallize Error:', e.message, 'err');
+      }
     }
 
-    renderPresetArt();
+    renderPresetArt(document.getElementById('preset').value);
+    appendLog('[zyoza-studio]', 'Ready. Select a Nounz or Lootz specimen and click Mint.', 'hl');
   </script>
 </body>
 </html>

@@ -50,6 +50,22 @@ impl OrchardSealAdapter {
         }
     }
 
+    /// Derives a real Orchard shielded payment address (`[u8; 43]` raw encoding) from a 32-byte ZIP-32 seed
+    /// using the `orchard` protocol crate (`SpendingKey -> FullViewingKey -> Address`).
+    pub fn derive_orchard_address(seed: &[u8; 32]) -> Result<[u8; 43], ZyozaError> {
+        use orchard::keys::{FullViewingKey, Scope, SpendingKey};
+        let mut candidate = *seed;
+        for ctr in 0u8..=255 {
+            candidate[0] = seed[0].wrapping_add(ctr);
+            if let Some(sk) = Option::<SpendingKey>::from(SpendingKey::from_bytes(candidate)) {
+                let fvk = FullViewingKey::from(&sk);
+                let addr = fvk.address_at(0u32, Scope::External);
+                return Ok(addr.to_raw_address_bytes());
+            }
+        }
+        Err(ZyozaError::Settlement("unable to derive Orchard SpendingKey".into()))
+    }
+
     /// Scans and parses a 512-byte Orchard memo into an `OrchardMemoSeal`.
     pub fn scan_memo(memo: &[u8; ORCHARD_MEMO_LEN]) -> Result<OrchardMemoSeal, ZyozaError> {
         OrchardMemoSeal::from_bytes(memo)

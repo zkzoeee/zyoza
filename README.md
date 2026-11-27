@@ -1,34 +1,43 @@
-# 🥟 Zyoza — Shielded State Objects on Zcash
+# Zyoza — Proof-Carrying Shielded State Objects on Zcash
 
-**Zyoza** is a modular, privacy-first **Shielded State Object** protocol on Zcash—launching first for **NFTs (`NFT1`)**, extensible to **ticketing (`TKT1`)** and **soulbound credentials (`CRD1`)**, live today on **Orchard**, and upgrade-ready for **ZSA (ZIP 226/227)** and **Tachyon + Ragu (non-uniform PCD)**.
+> **Status:** Research prototype — real `tachyon-zcash/ragu` non-uniform recursive PCD, Halo2 IPA supply-cap/migration circuits, Pallas ECDH + ChaCha20-Poly1305 out-of-band wrapping, ZIP 227 `AssetDigest`/`AssetBase`, ZIP 302 binary memo seals, and salted commit-reveal auctions executing over a simulated in-memory settlement ledger. Not audited.
 
-## Workspace Layout
+**Zyoza** lets creators and collectors mint, transfer, selectively disclose, and trade private NFTs, event tickets, credentials, game items, and deeds on Zcash without leaking ownership history or bloating L1 state.
 
-| Crate | Purpose |
-| :--- | :--- |
-| `zyoza-core` | ZIP 227 `AssetId`/`AssetBase`, 512B `OrchardMemoSeal`, `ObjectViewingKey`, core traits |
-| `zyoza-oob` | `ChaCha20Poly1305` + Pallas ECDH key handover, `OobStorage`, encrypted backups |
-| `zyoza-settlement` | `OrchardSealAdapter`, `OrchardRpcAdapter`, `OrchardZsaAdapter`, `TachyonAdapter`, FROST |
-| `zyoza-proofs` | Halo2 Pasta IPA ownership/attribute/migration proofs + `RaguPcdEngine` |
-| `zyoza-profile-nft` | `NFT1` profile (encrypted media manifest, royalties, lockups, provenance) |
-| `zyoza-profile-ticket` | `TKT1` profile (anonymous one-time check-in nullifiers, replay rejection) |
-| `zyoza-profile-cred` | `CRD1` profile (soulbound non-transferability, revocation registry) |
-| `zyoza-sdk` | High-level `ZyozaNftClient` + portable JSON/byte-slice FFI layer |
-| `zyoza-wasm` | `wasm-bindgen` browser bindings |
-| `zyoza-cli` | CLI for `init`, `nft mint`, `nft transfer`, `nft inspect`, `prove-ownership`, `verify-proof` |
-| `apps/gallery-demo` | Axum HTTP API + web UI for OVK-unlocked listings, ZK badges & sealed-bid auctions |
+## Workspace Layout (13 Crates)
+
+| Crate | Status | Purpose |
+| :--- | :--- | :--- |
+| `zyoza-core` | Implemented | ZIP 227 `AssetDigest`/`AssetId`/`AssetBase`, 512B ZIP 302 `OrchardMemoSeal` (`0xFF\|\|"ZYOZ"`), `CollectionSpec`, `ObjectViewingKey`, core traits |
+| `zyoza-oob` | Implemented | `ChaCha20Poly1305` + ephemeral Pallas ECDH (`HKDF-SHA256`) 32B DEK re-wrapping, `OobStorage`, seed-encrypted backups |
+| `zyoza-proofs` | Implemented | Real `tachyon-zcash/ragu` non-uniform recursive PCD (`MintCircuit`, `TransferCircuit`, `RoyaltyCircuit`, `TicketCheckInCircuit`, `UpgradeCircuit`), Poseidon-Merkle `OwnershipMerkleCircuit`, and Halo2 Pasta range/migration proofs |
+| `zyoza-settlement` | Simulated Ledger | Real `orchard` key/address derivation, 2-of-3 Pallas threshold Schnorr signing (trusted-dealer setup), plus in-memory `OrchardSealAdapter`, `OrchardZsaAdapter`, and `TachyonAdapter` |
+| `zyoza-profile-nft` | Implemented | `NFT1` collectibles (encrypted media manifest, royalties, time lockups, provenance) |
+| `zyoza-profile-ticket` | Implemented | `TKT1` ticketing (one-time Poseidon/BLAKE2b check-in nullifiers, replay rejection) |
+| `zyoza-profile-cred` | Implemented | `CRD1` soulbound credentials (non-transferability, issuer revocation registry) |
+| `zyoza-profile-gaming` | Implemented | `GAM1` Lootz cypherpunk items (mutable XP, level-ups, equipment slots) |
+| `zyoza-profile-rwa` | Implemented | `RWA1` tokenized real-world deeds (`CRD1` compliance gating, notary attestation) |
+| `zyoza-sdk` | Implemented | High-level `ZyozaNftClient` + portable JSON/byte-slice FFI layer |
+| `zyoza-wasm` | Implemented | `wasm-bindgen` browser verification & preview bindings |
+| `zyoza-cli` | Implemented | CLI for `init`, `nft mint`, `nft transfer`, `nft inspect`, `prove-ownership`, `verify-proof`, `ticket` |
+| `apps/gallery-demo` | Implemented | Axum web server (`/`, `/demo` Zyoza Studio, Markdown-rendered `/whitepaper`, `/spec`, `/security`, and commit-reveal auction API) |
 
 ## Quickstart
 
+Requires Rust `1.97+` (`rustc 1.99+` tested).
+
 ```bash
-# Run full workspace test suite (unit, Halo2, Ragu PCD, Tachyon 10k drop, HTTP API)
+# Run full workspace test suite (ZIP 227/302 vectors, Ragu recursive PCD, Halo2, Tachyon 10k drop, Studio HTTP API)
 cargo test --workspace --offline
 
-# Run the Gallery Demo HTTP server (default 127.0.0.1:8080)
-cargo run -p zyoza-gallery-demo
+# Launch Landing Page + Zyoza Studio + Whitepaper (defaults to http://127.0.0.1:8080; override via ZYOZA_LISTEN)
+ZYOZA_LISTEN=127.0.0.1:8080 cargo run -p zyoza-gallery-demo
 ```
 
 ## Documentation
-* [Whitepaper](docs/WHITEPAPER.md)
-* [Protocol Specification](docs/SPEC.md)
-* [Security Model, Constraints & Benchmarks](docs/SECURITY_AND_BENCHMARKS.md)
+* [Whitepaper (`docs/WHITEPAPER.md`)](docs/WHITEPAPER.md) — served live as HTML at `/whitepaper`
+* [Protocol Specification (`docs/SPEC.md`)](docs/SPEC.md) — served live as HTML at `/spec`
+* [Security Model, Constraints & Benchmarks (`docs/SECURITY_AND_BENCHMARKS.md`)](docs/SECURITY_AND_BENCHMARKS.md) — served live as HTML at `/security`
+
+## License
+Licensed under either of **MIT** or **Apache-2.0** at your option.

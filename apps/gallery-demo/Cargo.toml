@@ -8,17 +8,19 @@ license.workspace = true
 [dependencies]
 anyhow.workspace = true
 axum.workspace = true
+blake2b_simd.workspace = true
+hex.workspace = true
+pulldown-cmark.workspace = true
+rand.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
 zyoza-core.workspace = true
 zyoza-oob.workspace = true
 zyoza-profile-nft.workspace = true
 zyoza-proofs.workspace = true
 zyoza-sdk.workspace = true
 zyoza-settlement.workspace = true
-hex.workspace = true
-rand.workspace = true
-serde.workspace = true
-serde_json.workspace = true
-tokio.workspace = true
 
 [dev-dependencies]
 tower.workspace = true

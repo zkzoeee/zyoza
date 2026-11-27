@@ -1,24 +1,755 @@
-//! Ragu-style Non-Uniform Proof-Carrying Data (PCD) engine over Pasta (`EqAffine` / `Fp`).
+//! Real `tachyon-zcash/ragu` Non-Uniform Proof-Carrying Data (PCD) engine over Pasta.
 //!
-//! Each step (`MintStep`, `TransferStep`, `RoyaltyStep`, `TicketCheckInStep`,
-//! `AttributeUpgradeStep`) binds its profile-specific transition into a running
-//! constant-size recursive accumulator and produces a constant-size Halo2 IPA proof.
+//! Aligned with `./zashu`'s Ragu backend patterns (`FixedVec` multi-slot transition header,
+//! in-circuit state/asset contiguity enforcement, `SysRng` blinding, and exact
+//! `CompressedProof::encoded_len` checking), while registering Zyoza's non-uniform
+//! multi-profile `Step<Pasta>` subcircuits inside `ragu::Application<'static, Pasta, WalletRank, 5>`:
+//! - `Index(0)`: `UnitStep` (`() -> ()`, auxiliary empty right-hand child for unary folds)
+//! - `Index(1)`: `MintCircuit` (`() -> LineageHeader`, base seed step committing `[asset, genesis, latest, acc]`)
+//! - `Index(2)`: `TransferCircuit` (`(LineageHeader, ()) -> LineageHeader`, enforces `asset` + `prev_commit` contiguity)
+//! - `Index(3)`: `RoyaltyCircuit` (`(LineageHeader, ()) -> LineageHeader`, enforces `req && !paid == 0` + contiguity)
+//! - `Index(4)`: `TicketCheckInCircuit` (`(LineageHeader, ()) -> LineageHeader`, Poseidon ticket nullifier + contiguity)
+//! - `Index(5)`: `UpgradeCircuit` (`(LineageHeader, ()) -> LineageHeader`, `GAM1` state upgrade + contiguity)
+//! - `Index(6)`: `OwnershipMerkleCircuit` (`() -> OwnershipHeader`, 4-level Poseidon Merkle inclusion + challenge binding)
 
-use crate::{get_keys, hash_to_fp, Halo2ProofPayload, MembershipKnowledgeCircuit};
-use zyoza_core::{AssetId, ZyozaError, ProfileId, ProofBytes, ProofEngine};
-use halo2_proofs::circuit::{Layouter, SimpleFloorPlanner, Value};
-use halo2_proofs::pasta::{EqAffine, Fp};
-use halo2_proofs::plonk::{
-    create_proof, keygen_pk, keygen_vk, verify_proof, Advice, Circuit, Column, ConstraintSystem,
-    Error as PlonkError, Expression, Instance, ProvingKey, Selector, SingleVerifier, VerifyingKey,
+use blake2b_simd::Params as Blake2bParams;
+use ragu::drivers::emulator::{Emulator, Wireless};
+use ragu::drivers::{Driver, DriverValue, LinearExpression};
+use ragu::gadgets::{Bound, Kind};
+use ragu::header::{Header, Padding, Suffix};
+use ragu::maybe::{Always, Maybe};
+use ragu::pasta::{Fp as RaguFp, Pasta};
+use ragu::primitives::allocator::{Allocator, Standard};
+use ragu::primitives::poseidon::Sponge;
+use ragu::primitives::vec::{ConstLen, FixedVec};
+use ragu::primitives::{Boolean, Element};
+use ragu::step::{Encoded, Index, Oracles, Step};
+use ragu::udon::field::Field as _;
+use ragu::{
+    Application, ApplicationBuilder, CompressedProof, Cycle, Proof, Result as RaguResult,
+    WalletRank,
 };
-use halo2_proofs::poly::commitment::Params;
-use halo2_proofs::poly::Rotation;
-use halo2_proofs::transcript::{Blake2bRead, Blake2bWrite, Challenge255};
-use std::sync::OnceLock;
 use rand::rand_core::UnwrapErr;
 use rand::rngs::SysRng;
 use serde::{Deserialize, Serialize};
+use zyoza_core::{
+    AssetId, OwnershipProofRequest, OwnershipVerifyRequest, ProfileId, ProofBytes, ProofEngine,
+    ZyozaError,
+};
+
+/// `[asset_fp, genesis_commit_fp, latest_commit_fp, lineage_acc_fp]`
+const LINEAGE_SLOTS: usize = 4;
+/// Payload slots plus Ragu's header suffix slot.
+const HEADER_SIZE: usize = LINEAGE_SLOTS + 1;
+/// Depth of the Poseidon Merkle tree used for collection ownership proofs (`2^4 = 16` leaves).
+pub const MERKLE_DEPTH: usize = 4;
+
+const SLOT_ASSET: usize = 0;
+const SLOT_GENESIS: usize = 1;
+const SLOT_LATEST: usize = 2;
+const SLOT_ACC: usize = 3;
+
+type ZyozaRaguApp = Application<'static, Pasta, WalletRank, HEADER_SIZE>;
+type LineagePayload<'dr, D> = FixedVec<Element<'dr, D>, ConstLen<LINEAGE_SLOTS>>;
+
+/// Ragu `Header` carrying `[asset_fp, genesis_commit_fp, latest_commit_fp, lineage_acc_fp]`.
+pub struct LineageHeader;
+
+impl Header<RaguFp> for LineageHeader {
+    const SUFFIX: Suffix = Suffix::new(0);
+    type OnlinePolyCommit = (Padding, Padding);
+    type Data = [RaguFp; LINEAGE_SLOTS];
+    type Output = Kind![RaguFp; FixedVec<Element<'_, _>, ConstLen<LINEAGE_SLOTS>>];
+
+    fn encode<'dr, D: Driver<'dr, F = RaguFp>, A: Allocator<'dr, D>>(
+        dr: &mut D,
+        allocator: &mut A,
+        witness: DriverValue<D, Self::Data>,
+    ) -> RaguResult<Bound<'dr, D, Self::Output>> {
+        FixedVec::try_from_fn(|i| Element::alloc(dr, allocator, witness.as_ref().map(|w| w[i])))
+    }
+}
+
+fn lineage_header_value<'dr, D: Driver<'dr, F = RaguFp>>(
+    out: &LineagePayload<'dr, D>,
+) -> DriverValue<D, [RaguFp; LINEAGE_SLOTS]> {
+    let mut acc: DriverValue<D, Vec<RaguFp>> = D::just(|| Vec::with_capacity(LINEAGE_SLOTS));
+    for i in 0..LINEAGE_SLOTS {
+        let v = out[i].value().map(|v| *v);
+        acc = acc.and_then(|mut xs| {
+            v.map(|v| {
+                xs.push(v);
+                xs
+            })
+        });
+    }
+    acc.map(|xs| core::array::from_fn(|i| xs[i]))
+}
+
+/// Ragu `Header` carrying `Poseidon(collection_root, challenge)` for ZK ownership proofs.
+pub struct OwnershipHeader;
+
+impl Header<RaguFp> for OwnershipHeader {
+    const SUFFIX: Suffix = Suffix::new(1);
+    type OnlinePolyCommit = (Padding, Padding);
+    type Data = RaguFp;
+    type Output = Kind![RaguFp; Element<'_, _>];
+
+    fn encode<'dr, D: Driver<'dr, F = RaguFp>, A: Allocator<'dr, D>>(
+        dr: &mut D,
+        allocator: &mut A,
+        witness: DriverValue<D, Self::Data>,
+    ) -> RaguResult<Bound<'dr, D, Self::Output>> {
+        Element::alloc(dr, allocator, witness)
+    }
+}
+
+struct UnitStep;
+impl Step<Pasta> for UnitStep {
+    const INDEX: Index = Index::new(0);
+    type Witness<'source> = ();
+    type Aux<'source> = ();
+    type Left = ();
+    type Right = ();
+    type Output = ();
+
+    fn witness<'dr, 'source: 'dr, D: Driver<'dr, F = RaguFp>, const HS: usize>(
+        &self,
+        _: &mut D,
+        _: &mut Oracles<'_, 'dr, D, Pasta, Self>,
+        _: DriverValue<D, ()>,
+        _: DriverValue<D, ()>,
+        _: DriverValue<D, ()>,
+    ) -> RaguResult<(
+        (
+            Encoded<'dr, D, (), HS>,
+            Encoded<'dr, D, (), HS>,
+            Encoded<'dr, D, (), HS>,
+        ),
+        DriverValue<D, ()>,
+        DriverValue<D, ()>,
+    )> {
+        Ok((
+            (
+                Encoded::from_gadget(()),
+                Encoded::from_gadget(()),
+                Encoded::from_gadget(()),
+            ),
+            D::unit(),
+            D::unit(),
+        ))
+    }
+}
+
+#[derive(Clone, Copy)]
+struct MintWitness {
+    profile_fp: RaguFp,
+    asset_fp: RaguFp,
+    commit_fp: RaguFp,
+    secret_fp: RaguFp,
+}
+
+struct MintCircuit<'params> {
+    poseidon: &'params <Pasta as ragu::Cycle>::CircuitPoseidon,
+}
+
+impl Step<Pasta> for MintCircuit<'_> {
+    const INDEX: Index = Index::new(1);
+    type Witness<'source> = MintWitness;
+    type Aux<'source> = ();
+    type Left = ();
+    type Right = ();
+    type Output = LineageHeader;
+
+    fn witness<'dr, 'source: 'dr, D: Driver<'dr, F = RaguFp>, const HS: usize>(
+        &self,
+        dr: &mut D,
+        _: &mut Oracles<'_, 'dr, D, Pasta, Self>,
+        witness: DriverValue<D, Self::Witness<'source>>,
+        _: DriverValue<D, ()>,
+        _: DriverValue<D, ()>,
+    ) -> RaguResult<(
+        (
+            Encoded<'dr, D, (), HS>,
+            Encoded<'dr, D, (), HS>,
+            Encoded<'dr, D, LineageHeader, HS>,
+        ),
+        DriverValue<D, [RaguFp; LINEAGE_SLOTS]>,
+        DriverValue<D, ()>,
+    )>
+    where
+        Self: 'dr,
+    {
+        let alloc = &mut Standard::new();
+        let tag = Element::constant(dr, RaguFp::from(1u64));
+        let prof = Element::alloc(dr, alloc, witness.as_ref().map(|w| w.profile_fp))?;
+        let aid = Element::alloc(dr, alloc, witness.as_ref().map(|w| w.asset_fp))?;
+        let cmt = Element::alloc(dr, alloc, witness.as_ref().map(|w| w.commit_fp))?;
+        let sec = Element::alloc(dr, alloc, witness.as_ref().map(|w| w.secret_fp))?;
+
+        let mut sponge = Sponge::new(dr, self.poseidon);
+        sponge.absorb(dr, &tag)?;
+        sponge.absorb(dr, &prof)?;
+        sponge.absorb(dr, &aid)?;
+        sponge.absorb(dr, &cmt)?;
+        sponge.absorb(dr, &sec)?;
+        let acc = sponge.squeeze(dr)?;
+
+        let out = FixedVec::new(vec![aid, cmt.clone(), cmt, acc])?;
+        let data = lineage_header_value::<D>(&out);
+        Ok((
+            (
+                Encoded::from_gadget(()),
+                Encoded::from_gadget(()),
+                Encoded::from_gadget(out),
+            ),
+            data,
+            D::unit(),
+        ))
+    }
+}
+
+#[derive(Clone, Copy)]
+struct FoldCommonWitness {
+    asset_fp: RaguFp,
+    prev_commit_fp: RaguFp,
+    next_commit_fp: RaguFp,
+    profile_fp: RaguFp,
+    secret_fp: RaguFp,
+}
+
+/// Shared contiguity & lineage transition helper for recursive steps.
+fn fold_lineage<'dr, D: Driver<'dr, F = RaguFp>, A: Allocator<'dr, D>>(
+    dr: &mut D,
+    alloc: &mut A,
+    poseidon: &'dr <Pasta as ragu::Cycle>::CircuitPoseidon,
+    tag_u64: u64,
+    left_gadget: &LineagePayload<'dr, D>,
+    common: DriverValue<D, FoldCommonWitness>,
+    extra_absorb: Option<&Element<'dr, D>>,
+) -> RaguResult<LineagePayload<'dr, D>> {
+    let aid = Element::alloc(dr, alloc, common.as_ref().map(|w| w.asset_fp))?;
+    let prev_cmt = Element::alloc(dr, alloc, common.as_ref().map(|w| w.prev_commit_fp))?;
+    let next_cmt = Element::alloc(dr, alloc, common.as_ref().map(|w| w.next_commit_fp))?;
+    let prof = Element::alloc(dr, alloc, common.as_ref().map(|w| w.profile_fp))?;
+    let sec = Element::alloc(dr, alloc, common.as_ref().map(|w| w.secret_fp))?;
+
+    // Contiguity invariants (zashu pattern):
+    // 1. Asset identity never changes across recursive hops.
+    left_gadget[SLOT_ASSET].sub(dr, &aid).enforce_zero(dr)?;
+    // 2. Prior step's latest state commitment equals this step's input commitment.
+    left_gadget[SLOT_LATEST]
+        .sub(dr, &prev_cmt)
+        .enforce_zero(dr)?;
+
+    let tag = Element::constant(dr, RaguFp::from(tag_u64));
+    let mut sponge = Sponge::new(dr, poseidon);
+    sponge.absorb(dr, &tag)?;
+    sponge.absorb(dr, &left_gadget[SLOT_ACC])?;
+    sponge.absorb(dr, &prof)?;
+    sponge.absorb(dr, &next_cmt)?;
+    sponge.absorb(dr, &sec)?;
+    if let Some(extra) = extra_absorb {
+        sponge.absorb(dr, extra)?;
+    }
+    let next_acc = sponge.squeeze(dr)?;
+
+    FixedVec::new(vec![
+        left_gadget[SLOT_ASSET].clone(),
+        left_gadget[SLOT_GENESIS].clone(),
+        next_cmt,
+        next_acc,
+    ])
+}
+
+struct TransferCircuit<'params> {
+    poseidon: &'params <Pasta as ragu::Cycle>::CircuitPoseidon,
+}
+
+impl Step<Pasta> for TransferCircuit<'_> {
+    const INDEX: Index = Index::new(2);
+    type Witness<'source> = FoldCommonWitness;
+    type Aux<'source> = ();
+    type Left = LineageHeader;
+    type Right = ();
+    type Output = LineageHeader;
+
+    fn witness<'dr, 'source: 'dr, D: Driver<'dr, F = RaguFp>, const HS: usize>(
+        &self,
+        dr: &mut D,
+        _: &mut Oracles<'_, 'dr, D, Pasta, Self>,
+        witness: DriverValue<D, Self::Witness<'source>>,
+        left: DriverValue<D, [RaguFp; LINEAGE_SLOTS]>,
+        _: DriverValue<D, ()>,
+    ) -> RaguResult<(
+        (
+            Encoded<'dr, D, LineageHeader, HS>,
+            Encoded<'dr, D, (), HS>,
+            Encoded<'dr, D, LineageHeader, HS>,
+        ),
+        DriverValue<D, [RaguFp; LINEAGE_SLOTS]>,
+        DriverValue<D, ()>,
+    )>
+    where
+        Self: 'dr,
+    {
+        let alloc = &mut Standard::new();
+        let left_enc = Encoded::new(dr, alloc, left)?;
+        let out = fold_lineage(
+            dr,
+            alloc,
+            self.poseidon,
+            2,
+            left_enc.as_gadget(),
+            witness,
+            None,
+        )?;
+        let data = lineage_header_value::<D>(&out);
+        Ok((
+            (
+                left_enc,
+                Encoded::from_gadget(()),
+                Encoded::from_gadget(out),
+            ),
+            data,
+            D::unit(),
+        ))
+    }
+}
+
+#[derive(Clone, Copy)]
+struct RoyaltyWitness {
+    common: FoldCommonWitness,
+    royalty_required: bool,
+    royalty_paid: bool,
+}
+
+struct RoyaltyCircuit<'params> {
+    poseidon: &'params <Pasta as ragu::Cycle>::CircuitPoseidon,
+}
+
+impl Step<Pasta> for RoyaltyCircuit<'_> {
+    const INDEX: Index = Index::new(3);
+    type Witness<'source> = RoyaltyWitness;
+    type Aux<'source> = ();
+    type Left = LineageHeader;
+    type Right = ();
+    type Output = LineageHeader;
+
+    fn witness<'dr, 'source: 'dr, D: Driver<'dr, F = RaguFp>, const HS: usize>(
+        &self,
+        dr: &mut D,
+        _: &mut Oracles<'_, 'dr, D, Pasta, Self>,
+        witness: DriverValue<D, Self::Witness<'source>>,
+        left: DriverValue<D, [RaguFp; LINEAGE_SLOTS]>,
+        _: DriverValue<D, ()>,
+    ) -> RaguResult<(
+        (
+            Encoded<'dr, D, LineageHeader, HS>,
+            Encoded<'dr, D, (), HS>,
+            Encoded<'dr, D, LineageHeader, HS>,
+        ),
+        DriverValue<D, [RaguFp; LINEAGE_SLOTS]>,
+        DriverValue<D, ()>,
+    )>
+    where
+        Self: 'dr,
+    {
+        let alloc = &mut Standard::new();
+        let left_enc = Encoded::new(dr, alloc, left)?;
+
+        // In-circuit boolean royalty compliance gate: royalty_required && !royalty_paid == 0
+        let req = Boolean::alloc(dr, alloc, witness.as_ref().map(|w| w.royalty_required))?;
+        let paid = Boolean::alloc(dr, alloc, witness.as_ref().map(|w| w.royalty_paid))?;
+        let unpaid = paid.not(dr);
+        let violation = req.and(dr, &unpaid)?;
+        dr.enforce_zero(|lc| lc.add(violation.wire()))?;
+
+        let out = fold_lineage(
+            dr,
+            alloc,
+            self.poseidon,
+            3,
+            left_enc.as_gadget(),
+            witness.map(|w| w.common),
+            None,
+        )?;
+        let data = lineage_header_value::<D>(&out);
+        Ok((
+            (
+                left_enc,
+                Encoded::from_gadget(()),
+                Encoded::from_gadget(out),
+            ),
+            data,
+            D::unit(),
+        ))
+    }
+}
+
+struct TicketCheckInCircuit<'params> {
+    poseidon: &'params <Pasta as ragu::Cycle>::CircuitPoseidon,
+}
+
+impl Step<Pasta> for TicketCheckInCircuit<'_> {
+    const INDEX: Index = Index::new(4);
+    type Witness<'source> = FoldCommonWitness;
+    type Aux<'source> = ();
+    type Left = LineageHeader;
+    type Right = ();
+    type Output = LineageHeader;
+
+    fn witness<'dr, 'source: 'dr, D: Driver<'dr, F = RaguFp>, const HS: usize>(
+        &self,
+        dr: &mut D,
+        _: &mut Oracles<'_, 'dr, D, Pasta, Self>,
+        witness: DriverValue<D, Self::Witness<'source>>,
+        left: DriverValue<D, [RaguFp; LINEAGE_SLOTS]>,
+        _: DriverValue<D, ()>,
+    ) -> RaguResult<(
+        (
+            Encoded<'dr, D, LineageHeader, HS>,
+            Encoded<'dr, D, (), HS>,
+            Encoded<'dr, D, LineageHeader, HS>,
+        ),
+        DriverValue<D, [RaguFp; LINEAGE_SLOTS]>,
+        DriverValue<D, ()>,
+    )>
+    where
+        Self: 'dr,
+    {
+        let alloc = &mut Standard::new();
+        let left_enc = Encoded::new(dr, alloc, left)?;
+
+        // Derive one-time ticket check-in nullifier in-circuit
+        let event_cmt = Element::alloc(dr, alloc, witness.as_ref().map(|w| w.next_commit_fp))?;
+        let holder_sec = Element::alloc(dr, alloc, witness.as_ref().map(|w| w.secret_fp))?;
+        let mut nf_sponge = Sponge::new(dr, self.poseidon);
+        nf_sponge.absorb(dr, &holder_sec)?;
+        nf_sponge.absorb(dr, &event_cmt)?;
+        let ticket_nf = nf_sponge.squeeze(dr)?;
+
+        let out = fold_lineage(
+            dr,
+            alloc,
+            self.poseidon,
+            4,
+            left_enc.as_gadget(),
+            witness,
+            Some(&ticket_nf),
+        )?;
+        let data = lineage_header_value::<D>(&out);
+        Ok((
+            (
+                left_enc,
+                Encoded::from_gadget(()),
+                Encoded::from_gadget(out),
+            ),
+            data,
+            D::unit(),
+        ))
+    }
+}
+
+struct UpgradeCircuit<'params> {
+    poseidon: &'params <Pasta as ragu::Cycle>::CircuitPoseidon,
+}
+
+impl Step<Pasta> for UpgradeCircuit<'_> {
+    const INDEX: Index = Index::new(5);
+    type Witness<'source> = FoldCommonWitness;
+    type Aux<'source> = ();
+    type Left = LineageHeader;
+    type Right = ();
+    type Output = LineageHeader;
+
+    fn witness<'dr, 'source: 'dr, D: Driver<'dr, F = RaguFp>, const HS: usize>(
+        &self,
+        dr: &mut D,
+        _: &mut Oracles<'_, 'dr, D, Pasta, Self>,
+        witness: DriverValue<D, Self::Witness<'source>>,
+        left: DriverValue<D, [RaguFp; LINEAGE_SLOTS]>,
+        _: DriverValue<D, ()>,
+    ) -> RaguResult<(
+        (
+            Encoded<'dr, D, LineageHeader, HS>,
+            Encoded<'dr, D, (), HS>,
+            Encoded<'dr, D, LineageHeader, HS>,
+        ),
+        DriverValue<D, [RaguFp; LINEAGE_SLOTS]>,
+        DriverValue<D, ()>,
+    )>
+    where
+        Self: 'dr,
+    {
+        let alloc = &mut Standard::new();
+        let left_enc = Encoded::new(dr, alloc, left)?;
+        let out = fold_lineage(
+            dr,
+            alloc,
+            self.poseidon,
+            5,
+            left_enc.as_gadget(),
+            witness,
+            None,
+        )?;
+        let data = lineage_header_value::<D>(&out);
+        Ok((
+            (
+                left_enc,
+                Encoded::from_gadget(()),
+                Encoded::from_gadget(out),
+            ),
+            data,
+            D::unit(),
+        ))
+    }
+}
+
+#[derive(Clone, Copy)]
+struct OwnershipMerkleWitness {
+    asset_fp: RaguFp,
+    secret_fp: RaguFp,
+    siblings: [(RaguFp, bool); MERKLE_DEPTH],
+    challenge_fp: RaguFp,
+}
+
+/// Ragu circuit proving:
+/// 1. `owner_tag = Poseidon(secret)`
+/// 2. `leaf = Poseidon(asset_id, owner_tag)`
+/// 3. `root` = 4-level Poseidon Merkle path from `leaf` using `siblings`
+/// 4. Public `OwnershipHeader = Poseidon(root, challenge)`
+struct OwnershipMerkleCircuit<'params> {
+    poseidon: &'params <Pasta as ragu::Cycle>::CircuitPoseidon,
+}
+
+impl Step<Pasta> for OwnershipMerkleCircuit<'_> {
+    const INDEX: Index = Index::new(6);
+    type Witness<'source> = OwnershipMerkleWitness;
+    type Aux<'source> = ();
+    type Left = ();
+    type Right = ();
+    type Output = OwnershipHeader;
+
+    fn witness<'dr, 'source: 'dr, D: Driver<'dr, F = RaguFp>, const HS: usize>(
+        &self,
+        dr: &mut D,
+        _: &mut Oracles<'_, 'dr, D, Pasta, Self>,
+        witness: DriverValue<D, Self::Witness<'source>>,
+        _: DriverValue<D, ()>,
+        _: DriverValue<D, ()>,
+    ) -> RaguResult<(
+        (
+            Encoded<'dr, D, (), HS>,
+            Encoded<'dr, D, (), HS>,
+            Encoded<'dr, D, OwnershipHeader, HS>,
+        ),
+        DriverValue<D, RaguFp>,
+        DriverValue<D, ()>,
+    )>
+    where
+        Self: 'dr,
+    {
+        let alloc = &mut Standard::new();
+        let aid = Element::alloc(dr, alloc, witness.as_ref().map(|w| w.asset_fp))?;
+        let sec = Element::alloc(dr, alloc, witness.as_ref().map(|w| w.secret_fp))?;
+        let chal = Element::alloc(dr, alloc, witness.as_ref().map(|w| w.challenge_fp))?;
+
+        let mut sp_tag = Sponge::new(dr, self.poseidon);
+        sp_tag.absorb(dr, &sec)?;
+        let owner_tag = sp_tag.squeeze(dr)?;
+
+        let mut sp_leaf = Sponge::new(dr, self.poseidon);
+        sp_leaf.absorb(dr, &aid)?;
+        sp_leaf.absorb(dr, &owner_tag)?;
+        let mut cur = sp_leaf.squeeze(dr)?;
+
+        for level in 0..MERKLE_DEPTH {
+            let sib = Element::alloc(dr, alloc, witness.as_ref().map(|w| w.siblings[level].0))?;
+            let sib_is_right =
+                Boolean::alloc(dr, alloc, witness.as_ref().map(|w| w.siblings[level].1))?;
+            let left_el = sib_is_right.conditional_select(dr, &sib, &cur)?;
+            let right_el = sib_is_right.conditional_select(dr, &cur, &sib)?;
+
+            let mut sp_node = Sponge::new(dr, self.poseidon);
+            sp_node.absorb(dr, &left_el)?;
+            sp_node.absorb(dr, &right_el)?;
+            cur = sp_node.squeeze(dr)?;
+        }
+
+        let mut sp_out = Sponge::new(dr, self.poseidon);
+        sp_out.absorb(dr, &cur)?;
+        sp_out.absorb(dr, &chal)?;
+        let out = sp_out.squeeze(dr)?;
+        let out_val = out.value().map(|v| *v);
+
+        Ok((
+            (
+                Encoded::from_gadget(()),
+                Encoded::from_gadget(()),
+                Encoded::from_gadget(out),
+            ),
+            out_val,
+            D::unit(),
+        ))
+    }
+}
+
+struct CachedRagu {
+    app: ZyozaRaguApp,
+    unit_proof_bytes: Vec<u8>,
+}
+
+thread_local! {
+    static RAGU_APP: CachedRagu = {
+        let pasta = ragu::pcd::pasta::baked();
+        let poseidon = Pasta::circuit_poseidon(pasta);
+        let app = ApplicationBuilder::<Pasta, WalletRank, HEADER_SIZE>::new()
+            .register(UnitStep)
+            .expect("register UnitStep")
+            .register(MintCircuit { poseidon })
+            .expect("register MintCircuit")
+            .register(TransferCircuit { poseidon })
+            .expect("register TransferCircuit")
+            .register(RoyaltyCircuit { poseidon })
+            .expect("register RoyaltyCircuit")
+            .register(TicketCheckInCircuit { poseidon })
+            .expect("register TicketCheckInCircuit")
+            .register(UpgradeCircuit { poseidon })
+            .expect("register UpgradeCircuit")
+            .register(OwnershipMerkleCircuit { poseidon })
+            .expect("register OwnershipMerkleCircuit")
+            .finalize(pasta)
+            .expect("finalize Ragu Application");
+
+        let rng = &mut UnwrapErr(SysRng);
+        let (unit_pcd, ()) = app.seed(rng, UnitStep, ()).expect("seed UnitStep");
+        let unit_proof_bytes = unit_pcd.proof().to_bytes().expect("serialize unit proof");
+        CachedRagu {
+            app,
+            unit_proof_bytes,
+        }
+    };
+}
+
+fn with_ragu<T>(f: impl FnOnce(&CachedRagu) -> T) -> T {
+    RAGU_APP.with(f)
+}
+
+/// Returns the canonical byte size of a compressed Ragu proof at `WalletRank`.
+pub fn compressed_proof_len() -> usize {
+    CompressedProof::<Pasta>::encoded_len::<WalletRank>()
+}
+
+/// Computes `Poseidon(a)` natively using Ragu's `Emulator::execute()` so host & circuit match bit-for-bit.
+pub fn poseidon_1(a: RaguFp) -> RaguFp {
+    let pasta = ragu::pcd::pasta::baked();
+    let poseidon = Pasta::circuit_poseidon(pasta);
+    let mut dr = Emulator::<Wireless<Always<()>, RaguFp>>::execute();
+    let ea = Element::constant(&mut dr, a);
+    let mut sp = Sponge::new(&mut dr, poseidon);
+    sp.absorb(&mut dr, &ea).expect("absorb");
+    let out = sp.squeeze(&mut dr).expect("squeeze");
+    **out.value().snag()
+}
+
+/// Computes `Poseidon(a, b)` natively using Ragu's `Emulator::execute()`.
+pub fn poseidon_2(a: RaguFp, b: RaguFp) -> RaguFp {
+    let pasta = ragu::pcd::pasta::baked();
+    let poseidon = Pasta::circuit_poseidon(pasta);
+    let mut dr = Emulator::<Wireless<Always<()>, RaguFp>>::execute();
+    let ea = Element::constant(&mut dr, a);
+    let eb = Element::constant(&mut dr, b);
+    let mut sp = Sponge::new(&mut dr, poseidon);
+    sp.absorb(&mut dr, &ea).expect("absorb");
+    sp.absorb(&mut dr, &eb).expect("absorb");
+    let out = sp.squeeze(&mut dr).expect("squeeze");
+    **out.value().snag()
+}
+
+/// Maps arbitrary bytes deterministically into a canonical `RaguFp` element.
+pub fn bytes_to_ragu_fp(personal: &[u8; 16], parts: &[&[u8]]) -> RaguFp {
+    let mut h = Blake2bParams::new()
+        .hash_length(32)
+        .personal(personal)
+        .to_state();
+    for p in parts {
+        h.update(p);
+    }
+    let mut b = [0u8; 32];
+    b.copy_from_slice(h.finalize().as_bytes());
+    b[31] &= 0x3f;
+    RaguFp::from_bytes(b).expect("clamped < modulus")
+}
+
+/// Fixed-depth (`MERKLE_DEPTH = 4`, up to 16 assets) Poseidon Merkle collection registry
+/// for genuine in-circuit `OwnershipMerkleCircuit` proofs.
+#[derive(Debug, Clone)]
+pub struct CollectionMerkleTree {
+    leaves: Vec<[u8; 32]>,
+}
+
+impl CollectionMerkleTree {
+    /// Builds a collection tree from `(asset_id, owner_secret)` entries.
+    pub fn from_holdings(entries: &[(AssetId, &[u8])]) -> Self {
+        let mut leaves = Vec::with_capacity(1 << MERKLE_DEPTH);
+        for (aid, sec) in entries {
+            let aid_fp = bytes_to_ragu_fp(b"ZYOZA-AID-FP1___", &[&aid.0]);
+            let sec_fp = bytes_to_ragu_fp(b"ZYOZA-SEC-FP1___", &[sec]);
+            let tag = poseidon_1(sec_fp);
+            let leaf = poseidon_2(aid_fp, tag);
+            leaves.push(leaf.to_bytes());
+        }
+        while leaves.len() < (1 << MERKLE_DEPTH) {
+            leaves.push(RaguFp::from(0u64).to_bytes());
+        }
+        leaves.truncate(1 << MERKLE_DEPTH);
+        Self { leaves }
+    }
+
+    /// Computes the 32-byte Poseidon Merkle root of the collection.
+    pub fn root(&self) -> [u8; 32] {
+        let mut layer: Vec<RaguFp> = self
+            .leaves
+            .iter()
+            .map(|b| RaguFp::from_bytes(*b).unwrap())
+            .collect();
+        for _ in 0..MERKLE_DEPTH {
+            let mut next = Vec::with_capacity(layer.len() / 2);
+            for pair in layer.chunks_exact(2) {
+                next.push(poseidon_2(pair[0], pair[1]));
+            }
+            layer = next;
+        }
+        layer[0].to_bytes()
+    }
+
+    /// Generates the 4-level `(sibling_bytes, sibling_is_right)` path for `index`.
+    pub fn path(&self, mut index: usize) -> Vec<([u8; 32], bool)> {
+        let mut layer: Vec<RaguFp> = self
+            .leaves
+            .iter()
+            .map(|b| RaguFp::from_bytes(*b).unwrap())
+            .collect();
+        let mut out = Vec::with_capacity(MERKLE_DEPTH);
+        for _ in 0..MERKLE_DEPTH {
+            let is_right = index % 2 == 0;
+            let sib = if is_right {
+                layer[index + 1]
+            } else {
+                layer[index - 1]
+            };
+            out.push((sib.to_bytes(), is_right));
+            let mut next = Vec::with_capacity(layer.len() / 2);
+            for pair in layer.chunks_exact(2) {
+                next.push(poseidon_2(pair[0], pair[1]));
+            }
+            layer = next;
+            index /= 2;
+        }
+        out
+    }
+}
 
 /// Non-uniform PCD subcircuit step identifiers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -31,18 +762,20 @@ pub enum RaguStepKind {
 }
 
 impl RaguStepKind {
-    fn tag(self) -> &'static [u8; 16] {
-        match self {
-            Self::MintStep => b"RAGU-STEP-MINT__",
-            Self::TransferStep => b"RAGU-STEP-XFER__",
-            Self::RoyaltyStep => b"RAGU-STEP-ROYL__",
-            Self::TicketCheckInStep => b"RAGU-STEP-TCKT__",
-            Self::AttributeUpgradeStep => b"RAGU-STEP-UPGR__",
+    /// Parses a strict step kind name, rejecting unknown strings.
+    pub fn parse_strict(s: &str) -> Result<Self, ZyozaError> {
+        match s {
+            "MintStep" => Ok(Self::MintStep),
+            "TransferStep" => Ok(Self::TransferStep),
+            "RoyaltyStep" => Ok(Self::RoyaltyStep),
+            "TicketCheckInStep" => Ok(Self::TicketCheckInStep),
+            "AttributeUpgradeStep" => Ok(Self::AttributeUpgradeStep),
+            other => Err(ZyozaError::Proof(format!("unknown RaguStepKind: {other}"))),
         }
     }
 }
 
-/// Witness for a single non-uniform PCD step.
+/// Witness for a single Ragu non-uniform PCD step.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RaguStepWitness {
     pub kind: RaguStepKind,
@@ -50,177 +783,290 @@ pub struct RaguStepWitness {
     pub asset_id: AssetId,
     pub state_commitment: [u8; 32],
     pub secret_witness: Vec<u8>,
+    pub royalty_required: bool,
+    pub royalty_paid: bool,
 }
 
-/// Constant-size folded PCD proof carrying an arbitrary-length provenance lineage.
+/// Recursive Ragu PCD proof bundle carrying both the compressible recursive state
+/// (`uncompressed_proof`) for further `fuse` hops and the succinct wire proof
+/// (`compressed_proof`) verified in constant time via `Application::verify_compressed`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RaguPcdProof {
     pub asset_id: AssetId,
+    pub genesis_commitment: [u8; 32],
+    pub latest_commitment: [u8; 32],
     pub step_count: u64,
     pub last_step: RaguStepKind,
     pub last_profile: ProfileId,
-    pub acc_bytes: [u8; 32],
-    pub payload: Halo2ProofPayload,
+    pub header_bytes: [u8; 32],
+    pub uncompressed_proof: Vec<u8>,
+    pub compressed_proof: Vec<u8>,
 }
 
-/// Non-uniform PCD prover & verifier backed by Halo2 Pasta IPA.
+/// Real Ragu Non-Uniform Recursive PCD engine over Pasta (`WalletRank = R<13>`).
 #[derive(Debug, Default, Clone, Copy)]
 pub struct RaguPcdEngine;
 
 impl RaguPcdEngine {
-    /// Folds a new non-uniform step onto an optional prior `RaguPcdProof`.
-    /// The resulting serialized `RaguPcdProof` remains constant-size regardless of `step_count`.
+    /// Seeds (`prev == None`) or recursively fuses (`prev == Some(...)`) a non-uniform Ragu step.
     pub fn fold_step(
         &self,
         prev: Option<&RaguPcdProof>,
         step: &RaguStepWitness,
     ) -> Result<RaguPcdProof, ZyozaError> {
-        use ff::PrimeField;
+        // Pre-check royalty compliance natively for clear error reporting, in addition to the in-circuit gate.
+        if step.kind == RaguStepKind::RoyaltyStep && step.royalty_required && !step.royalty_paid {
+            return Err(ZyozaError::Proof(
+                "RoyaltyCircuit violation: required creator loyalty unpaid".into(),
+            ));
+        }
 
-        let (prev_acc, next_count) = match prev {
-            Some(p) => {
-                if p.asset_id != step.asset_id {
+        with_ragu(|ctx| {
+            let pasta = ragu::pcd::pasta::baked();
+            let poseidon = Pasta::circuit_poseidon(pasta);
+            let rng = &mut UnwrapErr(SysRng);
+
+            let profile_fp = bytes_to_ragu_fp(b"ZYOZA-PROF-FP1__", &[&step.profile_id]);
+            let asset_fp = bytes_to_ragu_fp(b"ZYOZA-AID-FP1___", &[&step.asset_id.0]);
+            let commit_fp = bytes_to_ragu_fp(b"ZYOZA-CMT-FP1___", &[&step.state_commitment]);
+            let secret_fp = bytes_to_ragu_fp(b"ZYOZA-SEC-FP1___", &[&step.secret_witness]);
+
+            let (pcd, genesis_commitment, next_count) = match (prev, step.kind) {
+                (None, RaguStepKind::MintStep) => {
+                    let (seeded, ()) = ctx
+                        .app
+                        .seed(
+                            rng,
+                            MintCircuit { poseidon },
+                            MintWitness {
+                                profile_fp,
+                                asset_fp,
+                                commit_fp,
+                                secret_fp,
+                            },
+                        )
+                        .map_err(|e| ZyozaError::Proof(format!("ragu seed MintCircuit: {e:?}")))?;
+                    (seeded, step.state_commitment, 1)
+                }
+                (None, other) => {
+                    return Err(ZyozaError::Proof(format!(
+                        "initial PCD step must be MintStep, got {other:?}"
+                    )));
+                }
+                (Some(_), RaguStepKind::MintStep) => {
                     return Err(ZyozaError::Proof(
-                        "PCD fold asset_id mismatch".into(),
+                        "cannot fold MintStep onto existing PCD lineage".into(),
                     ));
                 }
-                if !self.verify_pcd(p)? {
-                    return Err(ZyozaError::Proof(
-                        "prior PCD proof failed verification before folding".into(),
-                    ));
+                (Some(prior), kind) => {
+                    if prior.asset_id != step.asset_id {
+                        return Err(ZyozaError::Proof("PCD fold asset_id mismatch".into()));
+                    }
+                    let prior_gen_fp =
+                        bytes_to_ragu_fp(b"ZYOZA-CMT-FP1___", &[&prior.genesis_commitment]);
+                    let prior_lat_fp =
+                        bytes_to_ragu_fp(b"ZYOZA-CMT-FP1___", &[&prior.latest_commitment]);
+                    let prior_acc_fp = RaguFp::from_bytes(prior.header_bytes)
+                        .ok_or_else(|| ZyozaError::Proof("invalid prior header Fp".into()))?;
+                    let prior_data = [asset_fp, prior_gen_fp, prior_lat_fp, prior_acc_fp];
+
+                    let left_pcd =
+                        Proof::<Pasta, WalletRank>::from_bytes(&prior.uncompressed_proof)
+                            .map_err(|e| ZyozaError::Proof(format!("decode left Proof: {e:?}")))?
+                            .carry::<LineageHeader>(prior_data);
+                    let unit_pcd = Proof::<Pasta, WalletRank>::from_bytes(&ctx.unit_proof_bytes)
+                        .map_err(|e| ZyozaError::Proof(format!("decode unit Proof: {e:?}")))?
+                        .carry::<()>(());
+
+                    let common = FoldCommonWitness {
+                        asset_fp,
+                        prev_commit_fp: prior_lat_fp,
+                        next_commit_fp: commit_fp,
+                        profile_fp,
+                        secret_fp,
+                    };
+                    let (fused, ()) = match kind {
+                        RaguStepKind::TransferStep => ctx.app.fuse(
+                            rng,
+                            TransferCircuit { poseidon },
+                            common,
+                            left_pcd,
+                            unit_pcd,
+                        ),
+                        RaguStepKind::RoyaltyStep => ctx.app.fuse(
+                            rng,
+                            RoyaltyCircuit { poseidon },
+                            RoyaltyWitness {
+                                common,
+                                royalty_required: step.royalty_required,
+                                royalty_paid: step.royalty_paid,
+                            },
+                            left_pcd,
+                            unit_pcd,
+                        ),
+                        RaguStepKind::TicketCheckInStep => ctx.app.fuse(
+                            rng,
+                            TicketCheckInCircuit { poseidon },
+                            common,
+                            left_pcd,
+                            unit_pcd,
+                        ),
+                        RaguStepKind::AttributeUpgradeStep => ctx.app.fuse(
+                            rng,
+                            UpgradeCircuit { poseidon },
+                            common,
+                            left_pcd,
+                            unit_pcd,
+                        ),
+                        RaguStepKind::MintStep => unreachable!(),
+                    }
+                    .map_err(|e| ZyozaError::Proof(format!("ragu fuse({kind:?}): {e:?}")))?;
+
+                    (fused, prior.genesis_commitment, prior.step_count + 1)
                 }
-                let acc_fp = Option::<Fp>::from(Fp::from_repr(p.acc_bytes))
-                    .ok_or_else(|| ZyozaError::Proof("corrupt PCD accumulator".into()))?;
-                (acc_fp, p.step_count + 1)
-            }
-            None => (Fp::from(0u64), 1),
-        };
+            };
 
-        let secret = hash_to_fp(b"ZYOZA-SEC-v1____", &[&step.secret_witness]);
-        let step_leaf = hash_to_fp(
-            step.kind.tag(),
-            &[&step.profile_id, &step.asset_id.0, &step.state_commitment],
-        );
-        // Fold previous accumulator into the new challenge/state binding.
-        let ch = hash_to_fp(
-            b"ZYOZA-PCD-FOLD1_",
-            &[
-                &prev_acc.to_repr(),
-                &step.asset_id.0,
-                &next_count.to_be_bytes(),
-                &step.profile_id,
-            ],
-        );
-        let new_acc = prev_acc + step_leaf;
+            let header_data = *pcd.data();
+            let uncompressed_proof = pcd
+                .proof()
+                .to_bytes()
+                .map_err(|e| ZyozaError::Proof(format!("encode uncompressed proof: {e:?}")))?;
+            let compressed = ctx
+                .app
+                .compress(&pcd, rng)
+                .map_err(|e| ZyozaError::Proof(format!("ragu compress: {e:?}")))?;
+            let compressed_proof = compressed
+                .proof()
+                .to_bytes()
+                .map_err(|e| ZyozaError::Proof(format!("encode compressed proof: {e:?}")))?;
 
-        let keys = get_keys();
-        let digest = secret * ch + new_acc;
-        let circuit = MembershipKnowledgeCircuit {
-            secret: Value::known(secret),
-            leaf: Value::known(new_acc),
-            challenge: Value::known(ch),
-        };
-
-        let mut transcript = Blake2bWrite::<_, EqAffine, Challenge255<_>>::init(vec![]);
-        create_proof(
-            &keys.params,
-            &keys.pk,
-            &[circuit],
-            &[&[&[ch, digest]]],
-            UnwrapErr(SysRng),
-            &mut transcript,
-        )
-        .map_err(|e| ZyozaError::Proof(format!("ragu fold create_proof: {e:?}")))?;
-
-        Ok(RaguPcdProof {
-            asset_id: step.asset_id,
-            step_count: next_count,
-            last_step: step.kind,
-            last_profile: step.profile_id,
-            acc_bytes: new_acc.to_repr(),
-            payload: Halo2ProofPayload {
-                digest_bytes: digest.to_repr(),
-                ipa_proof: transcript.finalize(),
-            },
+            Ok(RaguPcdProof {
+                asset_id: step.asset_id,
+                genesis_commitment,
+                latest_commitment: step.state_commitment,
+                step_count: next_count,
+                last_step: step.kind,
+                last_profile: step.profile_id,
+                header_bytes: header_data[SLOT_ACC].to_bytes(),
+                uncompressed_proof,
+                compressed_proof,
+            })
         })
     }
 
-    /// Verifies a constant-size `RaguPcdProof` in O(1) time regardless of hop count.
+    /// Cryptographically verifies a `RaguPcdProof`'s succinct compressed proof
+    /// against `[asset_id, genesis_commitment, latest_commitment, header_bytes]`
+    /// via `ragu::Application::verify_compressed`.
     pub fn verify_pcd(&self, proof: &RaguPcdProof) -> Result<bool, ZyozaError> {
-        use ff::PrimeField;
+        if proof.compressed_proof.len() != compressed_proof_len() {
+            return Ok(false);
+        }
+        with_ragu(|ctx| {
+            let Some(acc_fp) = RaguFp::from_bytes(proof.header_bytes) else {
+                return Ok(false);
+            };
+            let asset_fp = bytes_to_ragu_fp(b"ZYOZA-AID-FP1___", &[&proof.asset_id.0]);
+            let gen_fp = bytes_to_ragu_fp(b"ZYOZA-CMT-FP1___", &[&proof.genesis_commitment]);
+            let lat_fp = bytes_to_ragu_fp(b"ZYOZA-CMT-FP1___", &[&proof.latest_commitment]);
+            let data = [asset_fp, gen_fp, lat_fp, acc_fp];
 
-        let digest = Option::<Fp>::from(Fp::from_repr(proof.payload.digest_bytes))
-            .ok_or_else(|| ZyozaError::Proof("invalid PCD digest Fp".into()))?;
-        let acc_fp = Option::<Fp>::from(Fp::from_repr(proof.acc_bytes))
-            .ok_or_else(|| ZyozaError::Proof("invalid PCD acc Fp".into()))?;
-
-        // Reconstruct challenge bound to the folded step metadata.
-        // Note: `ch` is included via public instance verification.
-        let _ = acc_fp;
-        // For O(1) self-contained verification, recompute the challenge from public fields
-        // when verifying via `verify_pcd_with_prev_acc` or use the stored prev_acc=0 for 1-step.
-        // Here we verify the IPA proof against the public digest & step count binding:
-        let keys = get_keys();
-        let _ = (keys, digest);
-        // Delegate to `verify_pcd_step` when prev_acc is known, or verify structural integrity:
-        Ok(!proof.payload.ipa_proof.is_empty() && proof.step_count >= 1)
+            let decoded = CompressedProof::<Pasta>::from_bytes(&proof.compressed_proof)
+                .map_err(|e| ZyozaError::Proof(format!("decode CompressedProof: {e:?}")))?;
+            ctx.app
+                .verify_compressed(&decoded.carry::<LineageHeader>(data))
+                .map_err(|e| ZyozaError::Proof(format!("ragu verify_compressed: {e:?}")))
+        })
     }
 
-    /// Verifies a `RaguPcdProof` step against the expected prior accumulator bytes.
-    pub fn verify_pcd_against_prev(
+    /// Generates a genuine Ragu Poseidon-Merkle ZK ownership proof bound to `(collection_root, challenge)`.
+    pub fn prove_merkle_ownership(
         &self,
-        prev_acc_bytes: Option<[u8; 32]>,
-        proof: &RaguPcdProof,
+        req: &OwnershipProofRequest,
+    ) -> Result<ProofBytes, ZyozaError> {
+        if req.merkle_siblings.len() != MERKLE_DEPTH {
+            return Err(ZyozaError::Proof(format!(
+                "expected {MERKLE_DEPTH} merkle_siblings, got {}",
+                req.merkle_siblings.len()
+            )));
+        }
+        with_ragu(|ctx| {
+            let pasta = ragu::pcd::pasta::baked();
+            let poseidon = Pasta::circuit_poseidon(pasta);
+            let rng = &mut UnwrapErr(SysRng);
+
+            let asset_fp = bytes_to_ragu_fp(b"ZYOZA-AID-FP1___", &[&req.asset_id.0]);
+            let secret_fp = bytes_to_ragu_fp(b"ZYOZA-SEC-FP1___", &[&req.secret_witness]);
+            let challenge_fp = bytes_to_ragu_fp(b"ZYOZA-CHAL-FP1__", &[&req.challenge]);
+
+            let mut siblings = [(RaguFp::from(0u64), true); MERKLE_DEPTH];
+            for (i, (sib_bytes, is_right)) in req.merkle_siblings.iter().enumerate() {
+                let sib_fp = RaguFp::from_bytes(*sib_bytes)
+                    .ok_or_else(|| ZyozaError::Proof("non-canonical Merkle sibling Fp".into()))?;
+                siblings[i] = (sib_fp, *is_right);
+            }
+
+            let (pcd, ()) = ctx
+                .app
+                .seed(
+                    rng,
+                    OwnershipMerkleCircuit { poseidon },
+                    OwnershipMerkleWitness {
+                        asset_fp,
+                        secret_fp,
+                        siblings,
+                        challenge_fp,
+                    },
+                )
+                .map_err(|e| ZyozaError::Proof(format!("ragu ownership seed: {e:?}")))?;
+
+            let compressed = ctx
+                .app
+                .compress(&pcd, rng)
+                .map_err(|e| ZyozaError::Proof(format!("ragu ownership compress: {e:?}")))?;
+            compressed
+                .proof()
+                .to_bytes()
+                .map_err(|e| ZyozaError::Proof(format!("encode ownership proof: {e:?}")))
+        })
+    }
+
+    /// Verifies a Ragu Poseidon-Merkle ZK ownership proof against `(collection_root, challenge)`.
+    /// Any random secret or unindexed `AssetId` produces a different Merkle root and fails verification!
+    pub fn verify_merkle_ownership(
+        &self,
+        req: &OwnershipVerifyRequest,
+        proof: &[u8],
     ) -> Result<bool, ZyozaError> {
-        use ff::PrimeField;
+        if proof.len() != compressed_proof_len() {
+            return Ok(false);
+        }
+        with_ragu(|ctx| {
+            let Some(root_fp) = RaguFp::from_bytes(req.collection_root) else {
+                return Ok(false);
+            };
+            let challenge_fp = bytes_to_ragu_fp(b"ZYOZA-CHAL-FP1__", &[&req.challenge]);
+            let expected_header = poseidon_2(root_fp, challenge_fp);
 
-        let prev_acc = match prev_acc_bytes {
-            Some(b) => Option::<Fp>::from(Fp::from_repr(b))
-                .ok_or_else(|| ZyozaError::Proof("invalid prev_acc".into()))?,
-            None => Fp::from(0u64),
-        };
-        let digest = Option::<Fp>::from(Fp::from_repr(proof.payload.digest_bytes))
-            .ok_or_else(|| ZyozaError::Proof("invalid PCD digest".into()))?;
-
-        let ch = hash_to_fp(
-            b"ZYOZA-PCD-FOLD1_",
-            &[
-                &prev_acc.to_repr(),
-                &proof.asset_id.0,
-                &proof.step_count.to_be_bytes(),
-                &proof.last_profile,
-            ],
-        );
-
-        let keys = get_keys();
-        let strategy = SingleVerifier::new(&keys.params);
-        let mut transcript =
-            Blake2bRead::<_, EqAffine, Challenge255<_>>::init(&proof.payload.ipa_proof[..]);
-        Ok(verify_proof(
-            &keys.params,
-            &keys.vk,
-            strategy,
-            &[&[&[ch, digest]]],
-            &mut transcript,
-        )
-        .is_ok())
+            let decoded = CompressedProof::<Pasta>::from_bytes(proof)
+                .map_err(|e| ZyozaError::Proof(format!("decode ownership CompressedProof: {e:?}")))?;
+            ctx.app
+                .verify_compressed(&decoded.carry::<OwnershipHeader>(expected_header))
+                .map_err(|e| ZyozaError::Proof(format!("verify ownership: {e:?}")))
+        })
     }
 }
 
 impl ProofEngine for RaguPcdEngine {
-    fn prove_ownership(
-        &self,
-        req: &zyoza_core::OwnershipProofRequest,
-    ) -> Result<ProofBytes, ZyozaError> {
-        crate::Halo2ProofEngine.prove_ownership(req)
+    fn prove_ownership(&self, req: &OwnershipProofRequest) -> Result<ProofBytes, ZyozaError> {
+        self.prove_merkle_ownership(req)
     }
 
     fn verify_ownership(
         &self,
-        req: &zyoza_core::OwnershipVerifyRequest,
+        req: &OwnershipVerifyRequest,
         proof: &[u8],
     ) -> Result<bool, ZyozaError> {
-        crate::Halo2ProofEngine.verify_ownership(req, proof)
+        self.verify_merkle_ownership(req, proof)
     }
 
     fn prove_transition(
@@ -242,19 +1088,10 @@ impl ProofEngine for RaguPcdEngine {
             .map_err(|e| ZyozaError::Proof(format!("serialize pcd: {e}")))
     }
 
-    fn verify_transition(&self, proof: &[u8], public_inputs: &[u8]) -> Result<bool, ZyozaError> {
+    fn verify_transition(&self, proof: &[u8], _public_inputs: &[u8]) -> Result<bool, ZyozaError> {
         let pcd: RaguPcdProof = serde_json::from_slice(proof)
             .map_err(|e| ZyozaError::Proof(format!("parse pcd: {e}")))?;
-        let prev_acc: Option<[u8; 32]> = if public_inputs.is_empty() {
-            None
-        } else if public_inputs.len() == 32 {
-            let mut arr = [0u8; 32];
-            arr.copy_from_slice(public_inputs);
-            Some(arr)
-        } else {
-            return Err(ZyozaError::Proof("public_inputs must be 0 or 32 bytes".into()));
-        };
-        self.verify_pcd_against_prev(prev_acc, &pcd)
+        self.verify_pcd(&pcd)
     }
 }
 
@@ -263,12 +1100,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn ragu_12_hop_composable_multi_profile_pcd() {
+    fn real_ragu_recursive_multi_profile_pcd_and_royalty_rejection() {
         let engine = RaguPcdEngine;
-        let asset_id = AssetId::derive(&[0x01; 32], b"zyoza:ragu:composable:1");
+        let asset_id = AssetId::derive(&[0x01; 32], b"zyoza:ragu:real:1");
 
-        // Hop 1: NFT1 MintStep
-        let mut pcd = engine
+        // 1. Seed MintStep
+        let t_seed = std::time::Instant::now();
+        let pcd1 = engine
             .fold_step(
                 None,
                 &RaguStepWitness {
@@ -277,267 +1115,226 @@ mod tests {
                     asset_id,
                     state_commitment: [0x01; 32],
                     secret_witness: b"creator-sk".to_vec(),
+                    royalty_required: false,
+                    royalty_paid: false,
                 },
             )
             .unwrap();
-        assert!(engine.verify_pcd_against_prev(None, &pcd).unwrap());
+        let seed_ms = t_seed.elapsed().as_millis();
+        assert!(engine.verify_pcd(&pcd1).unwrap());
+        let len_1 = pcd1.compressed_proof.len();
+        assert_eq!(len_1, compressed_proof_len());
 
-        let single_ipa_len = pcd.payload.ipa_proof.len();
-        let single_hop_len = serde_json::to_vec(&pcd).unwrap().len();
+        // 2. Unpaid required royalty is rejected!
+        let bad_royalty = engine.fold_step(
+            Some(&pcd1),
+            &RaguStepWitness {
+                kind: RaguStepKind::RoyaltyStep,
+                profile_id: *b"NFT1",
+                asset_id,
+                state_commitment: [0x02; 32],
+                secret_witness: b"seller-sk".to_vec(),
+                royalty_required: true,
+                royalty_paid: false,
+            },
+        );
+        assert!(bad_royalty.is_err());
 
-        // Hops 2..=10: 9 TransferSteps + RoyaltyStep
-        let t_start = std::time::Instant::now();
-        for hop in 2u8..=10 {
-            let kind = if hop % 3 == 0 {
-                RaguStepKind::RoyaltyStep
-            } else {
-                RaguStepKind::TransferStep
-            };
-            pcd = engine
-                .fold_step(
-                    Some(&pcd),
-                    &RaguStepWitness {
-                        kind,
-                        profile_id: *b"NFT1",
-                        asset_id,
-                        state_commitment: [hop; 32],
-                        secret_witness: vec![hop; 16],
+        // Also test forging an unpaid RoyaltyCircuit directly at the Ragu circuit level to verify the in-circuit boolean gate!
+        with_ragu(|ctx| {
+            let pasta = ragu::pcd::pasta::baked();
+            let poseidon = Pasta::circuit_poseidon(pasta);
+            let rng = &mut UnwrapErr(SysRng);
+            let asset_fp = bytes_to_ragu_fp(b"ZYOZA-AID-FP1___", &[&asset_id.0]);
+            let gen_fp = bytes_to_ragu_fp(b"ZYOZA-CMT-FP1___", &[&pcd1.genesis_commitment]);
+            let acc_fp = RaguFp::from_bytes(pcd1.header_bytes).unwrap();
+            let left_pcd = Proof::<Pasta, WalletRank>::from_bytes(&pcd1.uncompressed_proof)
+                .unwrap()
+                .carry::<LineageHeader>([asset_fp, gen_fp, gen_fp, acc_fp]);
+            let unit_pcd = Proof::<Pasta, WalletRank>::from_bytes(&ctx.unit_proof_bytes)
+                .unwrap()
+                .carry::<()>(());
+            let (forged_pcd, ()) = ctx
+                .app
+                .fuse(
+                    rng,
+                    RoyaltyCircuit { poseidon },
+                    RoyaltyWitness {
+                        common: FoldCommonWitness {
+                            asset_fp,
+                            prev_commit_fp: gen_fp,
+                            next_commit_fp: bytes_to_ragu_fp(b"ZYOZA-CMT-FP1___", &[&[0x02; 32]]),
+                            profile_fp: bytes_to_ragu_fp(b"ZYOZA-PROF-FP1__", &[b"NFT1"]),
+                            secret_fp: bytes_to_ragu_fp(b"ZYOZA-SEC-FP1___", &[b"seller-sk"]),
+                        },
+                        royalty_required: true,
+                        royalty_paid: false,
                     },
+                    left_pcd,
+                    unit_pcd,
                 )
                 .unwrap();
-        }
+            let compressed_forged = ctx.app.compress(&forged_pcd, rng).unwrap();
+            assert!(
+                !ctx.app.verify_compressed(&compressed_forged).unwrap(),
+                "in-circuit RoyaltyCircuit boolean gate MUST reject unpaid required royalty!"
+            );
+        });
 
-        // Hop 11: Composable TKT1 TicketCheckInStep on the SAME Zyoza!
-        pcd = engine
+        // 3. Paid RoyaltyStep + TicketCheckInStep (TKT1) + AttributeUpgradeStep (GAM1)
+        let pcd2 = engine
             .fold_step(
-                Some(&pcd),
+                Some(&pcd1),
+                &RaguStepWitness {
+                    kind: RaguStepKind::RoyaltyStep,
+                    profile_id: *b"NFT1",
+                    asset_id,
+                    state_commitment: [0x02; 32],
+                    secret_witness: b"seller-sk".to_vec(),
+                    royalty_required: true,
+                    royalty_paid: true,
+                },
+            )
+            .unwrap();
+        let pcd3 = engine
+            .fold_step(
+                Some(&pcd2),
                 &RaguStepWitness {
                     kind: RaguStepKind::TicketCheckInStep,
                     profile_id: *b"TKT1",
                     asset_id,
-                    state_commitment: [0x0B; 32],
-                    secret_witness: b"event-checkin".to_vec(),
+                    state_commitment: [0x03; 32],
+                    secret_witness: b"venue-sk".to_vec(),
+                    royalty_required: false,
+                    royalty_paid: false,
                 },
             )
             .unwrap();
-
-        // Hop 12: NFT1 AttributeUpgradeStep
-        let prev_acc = pcd.acc_bytes;
-        pcd = engine
+        let t_fold = std::time::Instant::now();
+        let pcd4 = engine
             .fold_step(
-                Some(&pcd),
+                Some(&pcd3),
                 &RaguStepWitness {
                     kind: RaguStepKind::AttributeUpgradeStep,
-                    profile_id: *b"NFT1",
+                    profile_id: *b"GAM1",
                     asset_id,
-                    state_commitment: [0x0C; 32],
-                    secret_witness: b"upgrade-level-2".to_vec(),
+                    state_commitment: [0x04; 32],
+                    secret_witness: b"player-sk".to_vec(),
+                    royalty_required: false,
+                    royalty_paid: false,
                 },
             )
             .unwrap();
-        let fold_11_ms = t_start.elapsed().as_millis();
+        let fold_ms = t_fold.elapsed().as_millis();
 
         let t_ver = std::time::Instant::now();
-        assert!(engine.verify_pcd_against_prev(Some(prev_acc), &pcd).unwrap());
-        let verify_ms = t_ver.elapsed().as_millis();
+        assert!(engine.verify_pcd(&pcd4).unwrap());
+        let ver_ms = t_ver.elapsed().as_millis();
 
-        let final_len = serde_json::to_vec(&pcd).unwrap().len();
-        assert_eq!(pcd.step_count, 12);
-        assert_eq!(pcd.last_step, RaguStepKind::AttributeUpgradeStep);
-        // Constant-size raw IPA proof regardless of 12 hops!
-        assert_eq!(pcd.payload.ipa_proof.len(), single_ipa_len);
-
+        assert_eq!(pcd4.step_count, 4);
+        assert_eq!(pcd4.genesis_commitment, [0x01; 32]);
+        assert_eq!(pcd4.latest_commitment, [0x04; 32]);
+        assert_eq!(pcd4.compressed_proof.len(), len_1);
         println!(
-            "Ragu 12-hop composable PCD: fold_11_hops={fold_11_ms}ms verify={verify_ms}ms single_len={single_hop_len}B final_len={final_len}B"
+            "Real Ragu PCD verified! compressed_proof={}B seed={}ms fold={}ms verify={}ms",
+            len_1, seed_ms, fold_ms, ver_ms
         );
+
+        // Tampering with latest_commitment or genesis_commitment or header_bytes MUST fail verify_compressed!
+        let mut tampered_latest = pcd4.clone();
+        tampered_latest.latest_commitment = [0x99; 32];
+        assert!(!engine.verify_pcd(&tampered_latest).unwrap());
+
+        let mut tampered_acc = pcd4.clone();
+        tampered_acc.header_bytes = pcd1.header_bytes;
+        assert!(!engine.verify_pcd(&tampered_acc).unwrap());
+
+        // Unknown step string rejected strictly
+        assert!(RaguStepKind::parse_strict("Bogus").is_err());
     }
 
     #[test]
-    fn in_circuit_royalty_rule_enforcement() {
-        let engine = RaguRuleCircuitEngine;
-        let asset_id = AssetId::derive(&[0x01; 32], b"zyoza:ragu:rule:1");
+    fn ragu_merkle_ownership_rejects_wrong_secret_or_unlisted_asset() {
+        let engine = RaguPcdEngine;
+        let a1 = AssetId::derive(&[0x01; 32], b"zyoza:col:1");
+        let a2 = AssetId::derive(&[0x01; 32], b"zyoza:col:2");
+        let unlisted = AssetId::derive(&[0x01; 32], b"zyoza:col:999");
 
-        // Royalty required & paid -> succeeds
-        let proof = engine
-            .prove_rule_step(&asset_id, Fp::from(10u64), Fp::from(7u64), true, true)
+        let tree = CollectionMerkleTree::from_holdings(&[
+            (a1, b"alice-real-secret"),
+            (a2, b"bob-real-secret"),
+        ]);
+        let root = tree.root();
+        let challenge = [0x77; 32];
+
+        // Valid owner proof for a1 (index 0) passes
+        let t_own = std::time::Instant::now();
+        let valid_proof = engine
+            .prove_merkle_ownership(&OwnershipProofRequest {
+                asset_id: a1,
+                collection_root: root,
+                merkle_siblings: tree.path(0),
+                secret_witness: b"alice-real-secret".to_vec(),
+                challenge,
+            })
             .unwrap();
+        let own_prove_ms = t_own.elapsed().as_millis();
+        let t_own_ver = std::time::Instant::now();
         assert!(engine
-            .verify_rule_step(&asset_id, Fp::from(10u64), Fp::from(17u64), &proof)
+            .verify_merkle_ownership(
+                &OwnershipVerifyRequest {
+                    collection_root: root,
+                    challenge,
+                },
+                &valid_proof
+            )
             .unwrap());
+        let own_ver_ms = t_own_ver.elapsed().as_millis();
+        println!(
+            "Ragu Merkle Ownership: proof={}B prove={}ms verify={}ms",
+            valid_proof.len(),
+            own_prove_ms,
+            own_ver_ms
+        );
 
-        // Royalty required & NOT paid -> in-circuit gate fails verification!
-        let bad_proof = engine
-            .prove_rule_step(&asset_id, Fp::from(10u64), Fp::from(7u64), true, false)
+        // Random / wrong secret MUST fail verification!
+        let wrong_secret_proof = engine
+            .prove_merkle_ownership(&OwnershipProofRequest {
+                asset_id: a1,
+                collection_root: root,
+                merkle_siblings: tree.path(0),
+                secret_witness: b"attacker-random-secret".to_vec(),
+                challenge,
+            })
             .unwrap();
         assert!(!engine
-            .verify_rule_step(&asset_id, Fp::from(10u64), Fp::from(17u64), &bad_proof)
+            .verify_merkle_ownership(
+                &OwnershipVerifyRequest {
+                    collection_root: root,
+                    challenge,
+                },
+                &wrong_secret_proof
+            )
             .unwrap());
-    }
-}
 
-#[derive(Clone, Debug)]
-struct RuleConfig {
-    prev_acc: Column<Advice>,
-    step_leaf: Column<Advice>,
-    royalty_req: Column<Advice>,
-    royalty_paid: Column<Advice>,
-    instance: Column<Instance>,
-    selector: Selector,
-}
-
-/// In-circuit Ragu PCD rule-enforcing circuit over Pasta `Fp`:
-/// 1. `royalty_req` and `royalty_paid` are boolean (`x * (1 - x) == 0`)
-/// 2. `royalty_req * (1 - royalty_paid) == 0` (if royalty required, it must be paid)
-/// 3. `next_acc == prev_acc + step_leaf`
-#[derive(Clone, Default)]
-struct RaguRuleCircuit {
-    prev_acc: Value<Fp>,
-    step_leaf: Value<Fp>,
-    royalty_req: Value<Fp>,
-    royalty_paid: Value<Fp>,
-}
-
-impl Circuit<Fp> for RaguRuleCircuit {
-    type Config = RuleConfig;
-    type FloorPlanner = SimpleFloorPlanner;
-
-    fn without_witnesses(&self) -> Self {
-        Self::default()
-    }
-
-    fn configure(meta: &mut ConstraintSystem<Fp>) -> Self::Config {
-        let prev_acc = meta.advice_column();
-        let step_leaf = meta.advice_column();
-        let royalty_req = meta.advice_column();
-        let royalty_paid = meta.advice_column();
-        let instance = meta.instance_column();
-        let selector = meta.selector();
-
-        meta.enable_equality(prev_acc);
-        meta.enable_equality(instance);
-
-        meta.create_gate("ragu_rule_and_fold", |meta| {
-            let s = meta.query_selector(selector);
-            let prev = meta.query_advice(prev_acc, Rotation::cur());
-            let leaf = meta.query_advice(step_leaf, Rotation::cur());
-            let next = meta.query_advice(prev_acc, Rotation::next());
-            let req = meta.query_advice(royalty_req, Rotation::cur());
-            let paid = meta.query_advice(royalty_paid, Rotation::cur());
-            let one = Expression::Constant(Fp::from(1u64));
-
-            vec![
-                s.clone() * (prev + leaf - next),
-                s.clone() * req.clone() * (one.clone() - req.clone()),
-                s.clone() * paid.clone() * (one.clone() - paid.clone()),
-                s * req * (one - paid),
-            ]
-        });
-
-        RuleConfig {
-            prev_acc,
-            step_leaf,
-            royalty_req,
-            royalty_paid,
-            instance,
-            selector,
-        }
-    }
-
-    fn synthesize(
-        &self,
-        config: Self::Config,
-        mut layouter: impl Layouter<Fp>,
-    ) -> Result<(), PlonkError> {
-        let (prev_cell, next_cell) = layouter.assign_region(
-            || "ragu_rule_row",
-            |mut region| {
-                config.selector.enable(&mut region, 0)?;
-                let prev = region.assign_advice(|| "prev_acc", config.prev_acc, 0, || self.prev_acc)?;
-                region.assign_advice(|| "step_leaf", config.step_leaf, 0, || self.step_leaf)?;
-                region.assign_advice(|| "royalty_req", config.royalty_req, 0, || self.royalty_req)?;
-                region.assign_advice(|| "royalty_paid", config.royalty_paid, 0, || self.royalty_paid)?;
-                let next_val = self.prev_acc + self.step_leaf;
-                let next = region.assign_advice(|| "next_acc", config.prev_acc, 1, || next_val)?;
-                Ok((prev, next))
-            },
-        )?;
-
-        layouter.constrain_instance(prev_cell.cell(), config.instance, 0)?;
-        layouter.constrain_instance(next_cell.cell(), config.instance, 1)?;
-        Ok(())
-    }
-}
-
-struct RuleKeys {
-    params: Params<EqAffine>,
-    vk: VerifyingKey<EqAffine>,
-    pk: ProvingKey<EqAffine>,
-}
-
-static RULE_KEYS: OnceLock<RuleKeys> = OnceLock::new();
-
-fn get_rule_keys() -> &'static RuleKeys {
-    RULE_KEYS.get_or_init(|| {
-        let params = Params::<EqAffine>::new(6);
-        let empty = RaguRuleCircuit::default();
-        let vk = keygen_vk(&params, &empty).expect("rule keygen_vk");
-        let pk = keygen_pk(&params, vk.clone(), &empty).expect("rule keygen_pk");
-        RuleKeys { params, vk, pk }
-    })
-}
-
-/// Prover/verifier for in-circuit Ragu PCD transition rules.
-pub struct RaguRuleCircuitEngine;
-
-impl RaguRuleCircuitEngine {
-    /// Proves a transition step enforcing royalty compliance in-circuit.
-    pub fn prove_rule_step(
-        &self,
-        _asset_id: &AssetId,
-        prev_acc: Fp,
-        step_leaf: Fp,
-        royalty_required: bool,
-        royalty_paid: bool,
-    ) -> Result<Vec<u8>, ZyozaError> {
-        let keys = get_rule_keys();
-        let next_acc = prev_acc + step_leaf;
-        let circuit = RaguRuleCircuit {
-            prev_acc: Value::known(prev_acc),
-            step_leaf: Value::known(step_leaf),
-            royalty_req: Value::known(Fp::from(u64::from(royalty_required))),
-            royalty_paid: Value::known(Fp::from(u64::from(royalty_paid))),
-        };
-        let mut transcript = Blake2bWrite::<_, EqAffine, Challenge255<_>>::init(vec![]);
-        create_proof(
-            &keys.params,
-            &keys.pk,
-            &[circuit],
-            &[&[&[prev_acc, next_acc]]],
-            UnwrapErr(SysRng),
-            &mut transcript,
-        )
-        .map_err(|e| ZyozaError::Proof(format!("ragu rule gate rejected: {e:?}")))?;
-        Ok(transcript.finalize())
-    }
-
-    /// Verifies an in-circuit Ragu PCD rule-enforcing proof.
-    pub fn verify_rule_step(
-        &self,
-        _asset_id: &AssetId,
-        prev_acc: Fp,
-        next_acc: Fp,
-        proof: &[u8],
-    ) -> Result<bool, ZyozaError> {
-        let keys = get_rule_keys();
-        let strategy = SingleVerifier::new(&keys.params);
-        let mut transcript = Blake2bRead::<_, EqAffine, Challenge255<_>>::init(proof);
-        Ok(verify_proof(
-            &keys.params,
-            &keys.vk,
-            strategy,
-            &[&[&[prev_acc, next_acc]]],
-            &mut transcript,
-        )
-        .is_ok())
+        // Unlisted asset MUST fail verification!
+        let unlisted_proof = engine
+            .prove_merkle_ownership(&OwnershipProofRequest {
+                asset_id: unlisted,
+                collection_root: root,
+                merkle_siblings: tree.path(0),
+                secret_witness: b"alice-real-secret".to_vec(),
+                challenge,
+            })
+            .unwrap();
+        assert!(!engine
+            .verify_merkle_ownership(
+                &OwnershipVerifyRequest {
+                    collection_root: root,
+                    challenge,
+                },
+                &unlisted_proof
+            )
+            .unwrap());
     }
 }

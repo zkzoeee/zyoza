@@ -189,12 +189,14 @@ mod tests {
             render_profile_preview_json("RWA1", &rwa.to_bytes().unwrap(), Some(&ovk)).unwrap();
         assert!(rwa_json.contains("Zug Note #7"));
 
-        let root = [0xAA; 32];
+        let tree = zyoza_proofs::CollectionMerkleTree::from_holdings(&[(asset_id, b"secret")]);
+        let root = tree.root();
         let chal = [0xBB; 32];
         let proof = Halo2ProofEngine
             .prove_ownership(&OwnershipProofRequest {
                 asset_id,
                 collection_root: root,
+                merkle_siblings: tree.path(0),
                 secret_witness: b"secret".to_vec(),
                 challenge: chal,
             })

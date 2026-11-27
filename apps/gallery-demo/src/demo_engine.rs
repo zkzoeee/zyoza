@@ -1,17 +1,22 @@
-use crate::GalleryService;
+use crate::{
+    compute_bid_commitment, AuctionClearResult, CommitBidRequest, GalleryService, RevealBidRequest,
+};
 use anyhow::{bail, Result};
 use rand::rngs::StdRng;
-use rand::SeedableRng;
+use rand::{Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use zyoza_core::{
-    AssetDesc, AssetId, CollectionSpec, MintClaim, ObjectViewingKey, OrchardMemoSeal,
-    OwnershipProofRequest, OwnershipVerifyRequest, ProofEngine, SettlementAdapter, ZyEnvelopeAlias,
-    PROTOCOL_VERSION,
+    AssetDesc, AssetId, AssetProfile, CollectionSpec, MintClaim, ObjectViewingKey, OrchardMemoSeal,
+    OwnershipProofRequest, OwnershipVerifyRequest, ProfilePreview, ProofEngine, SettlementAdapter,
+    ZyEnvelopeAlias, PROTOCOL_VERSION,
 };
 use zyoza_oob::{InMemoryStorage, OobEnvelope, OobKeypair, OobStorage};
-use zyoza_profile_nft::{CollectionPolicy, MediaManifest, NftState, ProvenanceEvent};
-use zyoza_proofs::{Halo2ProofEngine, RaguPcdEngine, RaguPcdProof, RaguStepKind, RaguStepWitness};
+use zyoza_profile_nft::{CollectionPolicy, MediaManifest, NftProfile, NftState, ProvenanceEvent};
+use zyoza_proofs::{
+    CollectionMerkleTree, Halo2ProofEngine, RaguPcdEngine, RaguPcdProof, RaguStepKind,
+    RaguStepWitness,
+};
 use zyoza_settlement::{
     aggregate_signatures, keygen_dealer, round1_commit, round2_sign, verify_frost_signature,
     OrchardSealAdapter, OrchardZsaAdapter,
@@ -32,7 +37,7 @@ pub struct DemoMintResp {
     pub oob_uri: String,
     pub ovk: String,
     pub nullifiers: Vec<String>,
-    pub pcd_bytes: usize,
+    pub compressed_proof_bytes: usize,
     pub pcd_steps: u64,
 }
 
@@ -61,6 +66,12 @@ pub struct DemoDecryptResp {
 }
 
 #[derive(Deserialize)]
+pub struct DemoPreviewReq {
+    pub session_id: String,
+    pub use_ovk: bool,
+}
+
+#[derive(Deserialize)]
 pub struct DemoFoldReq {
     pub session_id: String,
     pub step_kind: String,
@@ -71,10 +82,9 @@ pub struct DemoFoldReq {
 pub struct DemoFoldResp {
     pub step_count: u64,
     pub last_step: String,
-    pub ipa_bytes: usize,
-    pub json_bytes: usize,
+    pub compressed_proof_bytes: usize,
     pub verify_ms: u128,
-    pub acc_hex: String,
+    pub header_hex: String,
 }
 
 #[derive(Deserialize)]
@@ -89,7 +99,39 @@ pub struct DemoListResp {
     pub prove_ms: u128,
     pub verify_ms: u128,
     pub proof_bytes: usize,
+    pub collection_root_hex: String,
+    pub challenge_hex: String,
     pub title: String,
+}
+
+#[derive(Deserialize)]
+pub struct DemoCommitBidReq {
+    pub session_id: String,
+    pub bidder_id: String,
+    pub bid_zatoshis: u64,
+}
+
+#[derive(Serialize)]
+pub struct DemoCommitBidResp {
+    pub bidder_id: String,
+    pub commitment_hex: String,
+    pub salt_hex: String,
+}
+
+#[derive(Deserialize)]
+pub struct DemoRevealBidReq {
+    pub session_id: String,
+    pub bidder_id: String,
+    pub bid_zatoshis: u64,
+    pub salt_hex: String,
+}
+
+#[derive(Serialize)]
+pub struct DemoClearAuctionResp {
+    pub winning_bidder: String,
+    pub clearing_price_zatoshis: u64,
+    pub new_commitment: String,
+    pub new_oob_uri: String,
 }
 
 #[derive(Serialize)]
@@ -104,18 +146,21 @@ pub struct DemoCrystallizeResp {
 
 struct DemoSession {
     asset_id: AssetId,
+    asset_base_hex: String,
     nft_state: NftState,
     commitment: [u8; 32],
     oob_uri: String,
     ovk: ObjectViewingKey,
     pcd: RaguPcdProof,
+    owner: String,
+    listing_id: Option<u64>,
+    crystallized: bool,
 }
 
-/// Interactive cryptographic workbench backing `/demo`.
+/// Interactive cryptographic workbench backing `/demo` (Zyoza Studio).
 pub struct DemoWorkbench {
     next_num: u64,
-    alice: OobKeypair,
-    bob: OobKeypair,
+    actors: HashMap<String, OobKeypair>,
     storage: InMemoryStorage,
     orchard: OrchardSealAdapter,
     zsa: OrchardZsaAdapter,
@@ -124,10 +169,13 @@ pub struct DemoWorkbench {
 
 impl Default for DemoWorkbench {
     fn default() -> Self {
+        let mut actors = HashMap::new();
+        actors.insert("alice".into(), OobKeypair::from_seed_bytes(&[0xA1; 32]));
+        actors.insert("bob".into(), OobKeypair::from_seed_bytes(&[0xB2; 32]));
+        actors.insert("carol".into(), OobKeypair::from_seed_bytes(&[0xC3; 32]));
         Self {
             next_num: 0,
-            alice: OobKeypair::from_seed_bytes(&[0xA1; 32]),
-            bob: OobKeypair::from_seed_bytes(&[0xB2; 32]),
+            actors,
             storage: InMemoryStorage::default(),
             orchard: OrchardSealAdapter::new(),
             zsa: OrchardZsaAdapter::new(),
@@ -137,6 +185,23 @@ impl Default for DemoWorkbench {
 }
 
 impl DemoWorkbench {
+    fn keypair_for(&mut self, actor: &str) -> OobKeypair {
+        if let Some(k) = self.actors.get(actor) {
+            return k.clone();
+        }
+        let mut seed = [0u8; 32];
+        for (i, b) in actor.bytes().take(32).enumerate() {
+            seed[i] = b ^ 0x5A;
+        }
+        let kp = OobKeypair::from_seed_bytes(&seed);
+        self.actors.insert(actor.to_string(), kp.clone());
+        kp
+    }
+
+    pub fn reset(&mut self) {
+        *self = Self::default();
+    }
+
     pub fn mint(&mut self, req: DemoMintReq) -> Result<DemoMintResp> {
         let mut rng = StdRng::seed_from_u64(1000 + req.token_index);
         let issuer_vk = [0x07; 32];
@@ -152,8 +217,8 @@ impl DemoWorkbench {
             collection: req.preset.clone(),
             item_id: req.token_index.to_string(),
         };
-        let asset_id = AssetId::derive(&issuer_vk, &desc.to_canonical_bytes());
-        let asset_base = asset_id.to_asset_base();
+        let (asset_id, asset_base) =
+            AssetId::derive_with_base(&issuer_vk, &desc.to_canonical_bytes());
 
         let mut media_sha = [0u8; 32];
         media_sha[0..8].copy_from_slice(&req.token_index.to_be_bytes());
@@ -171,7 +236,7 @@ impl DemoWorkbench {
         let nft_state = NftState {
             asset_id,
             title,
-            description: "Shielded Zyoza Specimen".into(),
+            description: "Shielded Zyoza Specimen (Simulated Ledger)".into(),
             creator: "dumpling-syndicate".into(),
             media: MediaManifest {
                 mime: "image/svg+xml".into(),
@@ -202,7 +267,8 @@ impl DemoWorkbench {
         };
         let commitment = env.state_commitment();
 
-        let oob = OobEnvelope::seal(&mut rng, &env, &self.alice.public, &state_bytes)?;
+        let alice = self.keypair_for("alice");
+        let oob = OobEnvelope::seal(&mut rng, &env, &alice.public, &state_bytes)?;
         let oob_uri = self.storage.put(&oob)?;
         let memo = OrchardMemoSeal {
             version: PROTOCOL_VERSION,
@@ -225,10 +291,12 @@ impl DemoWorkbench {
                 profile_id: *b"NFT1",
                 asset_id,
                 state_commitment: commitment,
-                secret_witness: b"alice-mint".to_vec(),
+                secret_witness: b"alice".to_vec(),
+                royalty_required: false,
+                royalty_paid: false,
             },
         )?;
-        let pcd_bytes = serde_json::to_vec(&pcd)?.len();
+        let compressed_proof_bytes = pcd.compressed_proof.len();
         let ovk = ObjectViewingKey::derive(asset_id, &[0xA1; 32]);
 
         self.next_num += 1;
@@ -237,11 +305,15 @@ impl DemoWorkbench {
             session_id.clone(),
             DemoSession {
                 asset_id,
+                asset_base_hex: asset_base.to_hex(),
                 nft_state,
                 commitment,
                 oob_uri: oob_uri.clone(),
                 ovk: ovk.clone(),
                 pcd,
+                owner: "alice".into(),
+                listing_id: None,
+                crystallized: false,
             },
         );
 
@@ -253,35 +325,50 @@ impl DemoWorkbench {
             oob_uri,
             ovk: hex::encode(ovk.key_bytes),
             nullifiers: nfs.iter().map(hex::encode).collect(),
-            pcd_bytes,
+            compressed_proof_bytes,
             pcd_steps: 1,
         })
     }
 
     pub fn transfer(&mut self, req: SessionReq) -> Result<DemoTransferResp> {
+        self.transfer_to(&req.session_id, "bob")
+    }
+
+    fn transfer_to(&mut self, session_id: &str, new_owner: &str) -> Result<DemoTransferResp> {
         let mut rng = StdRng::seed_from_u64(2026);
-        let sess = self
+        let to_kp = self.keypair_for(new_owner);
+        let cur_owner = self
             .sessions
-            .get_mut(&req.session_id)
-            .ok_or_else(|| anyhow::anyhow!("session not found"))?;
+            .get(session_id)
+            .ok_or_else(|| anyhow::anyhow!("session not found"))?
+            .owner
+            .clone();
+        let from_kp = self.keypair_for(&cur_owner);
+
+        let sess = self.sessions.get_mut(session_id).unwrap();
+        if sess.crystallized {
+            bail!("Stage I seal already burned and crystallized into Stage II ZSA");
+        }
+        if sess.owner == new_owner {
+            bail!("object is already owned by {new_owner}");
+        }
 
         let prev_oob = self.storage.get(&sess.oob_uri)?;
-        let new_oob = prev_oob.rewrap_for_recipient(
-            &mut rng,
-            &self.alice.secret,
-            &self.bob.public,
-            [0x42; 32],
-        )?;
+        let mut nonce = [0u8; 32];
+        rng.fill_bytes(&mut nonce);
+        let new_oob =
+            prev_oob.rewrap_for_recipient(&mut rng, &from_kp.secret, &to_kp.public, nonce)?;
         let new_oob_uri = self.storage.put(&new_oob)?;
 
         let mut next_commit = sess.commitment;
-        next_commit[0] ^= 0xFF;
+        next_commit[0] = next_commit[0].wrapping_add(1);
+        next_commit[1] ^= nonce[0];
         let memo = OrchardMemoSeal {
             version: PROTOCOL_VERSION,
             profile_id: *b"NFT1",
             asset_id: sess.asset_id,
             state_root: sess.nft_state.state_root()?,
-            nonce: [0x42; 32],
+            nonce,
             oob_pointer_hash: new_oob.pointer_hash()?,
             oob_uri: new_oob_uri.clone(),
         }
@@ -291,31 +378,45 @@ impl DemoWorkbench {
             .anchor_transfer(&sess.asset_id, sess.commitment, next_commit, &memo)?;
         sess.commitment = next_commit;
         sess.oob_uri = new_oob_uri.clone();
+        sess.owner = new_owner.to_string();
 
         Ok(DemoTransferResp {
             prev_spent: true,
             new_commitment: hex::encode(next_commit),
             new_oob_uri,
-            owner: "bob".into(),
+            owner: new_owner.to_string(),
         })
     }
 
-    pub fn decrypt(&self, req: DemoDecryptReq) -> Result<DemoDecryptResp> {
+    pub fn decrypt(&mut self, req: DemoDecryptReq) -> Result<DemoDecryptResp> {
+        let kp = self.keypair_for(&req.actor);
         let sess = self
             .sessions
             .get(&req.session_id)
             .ok_or_else(|| anyhow::anyhow!("session not found"))?;
         let oob = self.storage.get(&sess.oob_uri)?;
-        let sk = match req.actor.as_str() {
-            "alice" => &self.alice.secret,
-            "bob" => &self.bob.secret,
-            other => bail!("unknown actor: {other}"),
-        };
-        let plain = oob.open(sk)?;
-        let parsed = NftState::from_bytes(&plain)?;
-        Ok(DemoDecryptResp {
-            decrypted_summary: format!("{} (creator: {})", parsed.title, parsed.creator),
-        })
+        match oob.open(&kp.secret) {
+            Ok(plain) => {
+                let parsed = NftState::from_bytes(&plain)?;
+                Ok(DemoDecryptResp {
+                    decrypted_summary: format!("{} (creator: {})", parsed.title, parsed.creator),
+                })
+            }
+            Err(_) => bail!(
+                "{} does not hold the current decryption key (DEK is wrapped for {})",
+                req.actor,
+                sess.owner
+            ),
+        }
+    }
+
+    pub fn preview(&self, req: DemoPreviewReq) -> Result<ProfilePreview> {
+        let sess = self
+            .sessions
+            .get(&req.session_id)
+            .ok_or_else(|| anyhow::anyhow!("session not found"))?;
+        let ovk = if req.use_ovk { Some(&sess.ovk) } else { None };
+        Ok(NftProfile.public_preview(&sess.nft_state.to_bytes()?, ovk)?)
     }
 
     pub fn fold(&mut self, req: DemoFoldReq) -> Result<DemoFoldResp> {
@@ -323,17 +424,18 @@ impl DemoWorkbench {
             .sessions
             .get_mut(&req.session_id)
             .ok_or_else(|| anyhow::anyhow!("session not found"))?;
-        let kind = match req.step_kind.as_str() {
-            "RoyaltyStep" => RaguStepKind::RoyaltyStep,
-            "TicketCheckInStep" => RaguStepKind::TicketCheckInStep,
-            "AttributeUpgradeStep" => RaguStepKind::AttributeUpgradeStep,
-            _ => RaguStepKind::TransferStep,
-        };
-        let mut prof = [b' '; 4];
-        for (i, b) in req.profile_id.bytes().take(4).enumerate() {
-            prof[i] = b;
+        if sess.crystallized {
+            bail!("Stage I seal already burned and crystallized into Stage II ZSA");
         }
-        let prev_acc = sess.pcd.acc_bytes;
+
+        // Strict parse: unknown step kinds like "Bogus" are rejected!
+        let kind = RaguStepKind::parse_strict(&req.step_kind)?;
+        if req.profile_id.len() != 4 {
+            bail!("profile_id must be a 4-character tag (e.g. NFT1, TKT1, GAM1)");
+        }
+        let mut prof = [0u8; 4];
+        prof.copy_from_slice(req.profile_id.as_bytes());
+
         let next_pcd = RaguPcdEngine.fold_step(
             Some(&sess.pcd),
             &RaguStepWitness {
@@ -341,46 +443,58 @@ impl DemoWorkbench {
                 profile_id: prof,
                 asset_id: sess.asset_id,
                 state_commitment: sess.commitment,
-                secret_witness: b"fold-witness".to_vec(),
+                secret_witness: sess.owner.as_bytes().to_vec(),
+                royalty_required: kind == RaguStepKind::RoyaltyStep,
+                royalty_paid: true,
             },
         )?;
         let t_ver = std::time::Instant::now();
-        let ok = RaguPcdEngine.verify_pcd_against_prev(Some(prev_acc), &next_pcd)?;
+        let ok = RaguPcdEngine.verify_pcd(&next_pcd)?;
         let verify_ms = t_ver.elapsed().as_millis();
         if !ok {
-            bail!("PCD verification failed");
+            bail!("Ragu verify_compressed failed");
         }
-        let ipa_bytes = next_pcd.payload.ipa_proof.len();
-        let json_bytes = serde_json::to_vec(&next_pcd)?.len();
+        let compressed_proof_bytes = next_pcd.compressed_proof.len();
         sess.pcd = next_pcd;
 
         Ok(DemoFoldResp {
             step_count: sess.pcd.step_count,
             last_step: req.step_kind,
-            ipa_bytes,
-            json_bytes,
+            compressed_proof_bytes,
             verify_ms,
-            acc_hex: hex::encode(sess.pcd.acc_bytes),
+            header_hex: hex::encode(sess.pcd.header_bytes),
         })
     }
 
     pub fn list_on_gallery(
-        &self,
+        &mut self,
         req: DemoListReq,
         gallery: &mut GalleryService,
     ) -> Result<DemoListResp> {
         let sess = self
             .sessions
-            .get(&req.session_id)
+            .get_mut(&req.session_id)
             .ok_or_else(|| anyhow::anyhow!("session not found"))?;
-        let collection_root = [0x33; 32];
-        let challenge = [0x44; 32];
+        if sess.crystallized {
+            bail!("Stage I seal already burned and crystallized into Stage II ZSA");
+        }
+        if sess.listing_id.is_some() {
+            bail!("session is already listed on the gallery");
+        }
+
+        // Build real Poseidon Merkle tree from actual owner secret & generate fresh challenge!
+        let owner_secret = sess.owner.as_bytes().to_vec();
+        let tree = CollectionMerkleTree::from_holdings(&[(sess.asset_id, &owner_secret)]);
+        let collection_root = tree.root();
+        let mut challenge = [0u8; 32];
+        rand::rng().fill_bytes(&mut challenge);
 
         let t0 = std::time::Instant::now();
-        let proof = Halo2ProofEngine.prove_ownership(&OwnershipProofRequest {
+        let proof = RaguPcdEngine.prove_ownership(&OwnershipProofRequest {
             asset_id: sess.asset_id,
             collection_root,
-            secret_witness: b"holder-sk".to_vec(),
+            merkle_siblings: tree.path(0),
+            secret_witness: owner_secret,
             challenge,
         })?;
         let prove_ms = t0.elapsed().as_millis();
@@ -397,13 +511,92 @@ impl DemoWorkbench {
             req.reserve_zatoshis,
         )?;
         let verify_ms = t1.elapsed().as_millis();
+        sess.listing_id = Some(listing.listing_id);
 
         Ok(DemoListResp {
             listing_id: listing.listing_id,
             prove_ms,
             verify_ms,
             proof_bytes: proof.len(),
+            collection_root_hex: hex::encode(collection_root),
+            challenge_hex: hex::encode(challenge),
             title: listing.preview.title,
+        })
+    }
+
+    pub fn commit_bid(
+        &self,
+        req: DemoCommitBidReq,
+        gallery: &mut GalleryService,
+    ) -> Result<DemoCommitBidResp> {
+        let sess = self
+            .sessions
+            .get(&req.session_id)
+            .ok_or_else(|| anyhow::anyhow!("session not found"))?;
+        let listing_id = sess
+            .listing_id
+            .ok_or_else(|| anyhow::anyhow!("session is not listed yet"))?;
+
+        let mut salt = [0u8; 32];
+        rand::rng().fill_bytes(&mut salt);
+        let commitment_hex = hex::encode(compute_bid_commitment(
+            listing_id,
+            &req.bidder_id,
+            req.bid_zatoshis,
+            &salt,
+        ));
+        gallery.commit_sealed_bid(
+            listing_id,
+            CommitBidRequest {
+                bidder_id: req.bidder_id.clone(),
+                commitment_hex: commitment_hex.clone(),
+            },
+        )?;
+        Ok(DemoCommitBidResp {
+            bidder_id: req.bidder_id,
+            commitment_hex,
+            salt_hex: hex::encode(salt),
+        })
+    }
+
+    pub fn reveal_bid(&self, req: DemoRevealBidReq, gallery: &mut GalleryService) -> Result<()> {
+        let sess = self
+            .sessions
+            .get(&req.session_id)
+            .ok_or_else(|| anyhow::anyhow!("session not found"))?;
+        let listing_id = sess
+            .listing_id
+            .ok_or_else(|| anyhow::anyhow!("session is not listed yet"))?;
+        gallery.reveal_sealed_bid(
+            listing_id,
+            RevealBidRequest {
+                bidder_id: req.bidder_id,
+                bid_zatoshis: req.bid_zatoshis,
+                salt_hex: req.salt_hex,
+            },
+        )
+    }
+
+    pub fn clear_and_settle(
+        &mut self,
+        req: SessionReq,
+        gallery: &mut GalleryService,
+    ) -> Result<DemoClearAuctionResp> {
+        let listing_id = self
+            .sessions
+            .get(&req.session_id)
+            .ok_or_else(|| anyhow::anyhow!("session not found"))?
+            .listing_id
+            .ok_or_else(|| anyhow::anyhow!("session is not listed"))?;
+
+        let cleared: AuctionClearResult = gallery.clear_auction(listing_id)?;
+        // Actually execute OOB DEK re-wrap & simulated seal transfer to the auction winner!
+        let xfer = self.transfer_to(&req.session_id, &cleared.winning_bidder)?;
+        Ok(DemoClearAuctionResp {
+            winning_bidder: cleared.winning_bidder,
+            clearing_price_zatoshis: cleared.clearing_price_zatoshis,
+            new_commitment: xfer.new_commitment,
+            new_oob_uri: xfer.new_oob_uri,
         })
     }
 
@@ -413,15 +606,19 @@ impl DemoWorkbench {
             .sessions
             .get_mut(&req.session_id)
             .ok_or_else(|| anyhow::anyhow!("session not found"))?;
+        if sess.crystallized {
+            bail!("already crystallized into Stage II ZSA");
+        }
 
-        // 1. Halo2 migration proof
-        let mig_proof =
-            Halo2ProofEngine.prove_migration(&sess.asset_id, sess.commitment, b"owner-sk")?;
+        let mig_proof = Halo2ProofEngine.prove_migration(
+            &sess.asset_id,
+            sess.commitment,
+            sess.owner.as_bytes(),
+        )?;
         if !Halo2ProofEngine.verify_migration(&sess.asset_id, sess.commitment, &mig_proof)? {
             bail!("migration proof invalid");
         }
 
-        // 2. Burn Stage I Orchard seal
         let burn_memo = OrchardMemoSeal {
             version: PROTOCOL_VERSION,
             profile_id: *b"NFT1",
@@ -437,7 +634,6 @@ impl DemoWorkbench {
         self.orchard
             .anchor_transfer(&sess.asset_id, sess.commitment, burn_commit, &burn_memo)?;
 
-        // 3. 2-of-3 Pallas FROST threshold signature
         let (group_pk, shares) = keygen_dealer(&mut rng, 2, 3)?;
         let c1 = round1_commit(&mut rng, &shares[0]);
         let c3 = round1_commit(&mut rng, &shares[2]);
@@ -449,7 +645,6 @@ impl DemoWorkbench {
             bail!("FROST signature verification failed");
         }
 
-        // 4. Mint native ZSA note
         let zsa_memo = OrchardMemoSeal {
             version: PROTOCOL_VERSION,
             profile_id: *b"NFT1",
@@ -463,12 +658,13 @@ impl DemoWorkbench {
         let rcpt = self
             .zsa
             .anchor_mint(&sess.asset_id, sess.nft_state.state_root()?, &zsa_memo)?;
+        sess.crystallized = true;
 
         Ok(DemoCrystallizeResp {
             zsa_txid: hex::encode(rcpt.tx_id),
             asset_id: sess.asset_id.to_hex(),
-            asset_base: sess.asset_id.to_asset_base().to_hex(),
-            frost_signers: "Signers #1 & #3 (2-of-3 Pallas FROST)".into(),
+            asset_base: sess.asset_base_hex.clone(),
+            frost_signers: "Signers #1 & #3 (2-of-3 Pallas Schnorr, trusted-dealer setup)".into(),
             value: 1,
             finalized: true,
         })

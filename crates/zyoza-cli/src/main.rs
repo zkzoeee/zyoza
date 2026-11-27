@@ -333,12 +333,22 @@ fn main() -> Result<()> {
                 out,
             } => {
                 let _ = load_ledger(&dir)?;
+                let asset = AssetId(parse_32(&asset_id)?);
+                let sec_bytes = secret.into_bytes();
+                let tree = zyoza_proofs::CollectionMerkleTree::from_holdings(&[(asset, &sec_bytes)]);
+                let root_bytes = if collection_root == "auto" {
+                    tree.root()
+                } else {
+                    parse_32(&collection_root)?
+                };
                 let proof = Halo2ProofEngine.prove_ownership(&OwnershipProofRequest {
-                    asset_id: AssetId(parse_32(&asset_id)?),
-                    collection_root: parse_32(&collection_root)?,
-                    secret_witness: secret.into_bytes(),
+                    asset_id: asset,
+                    collection_root: root_bytes,
+                    merkle_siblings: tree.path(0),
+                    secret_witness: sec_bytes,
                     challenge: parse_32(&challenge)?,
                 })?;
+                println!("Collection Merkle Root: {}", hex::encode(root_bytes));
                 fs::write(&out, &proof)?;
                 println!("Wrote Halo2 ownership proof ({} bytes) to {}", proof.len(), out.display());
             }

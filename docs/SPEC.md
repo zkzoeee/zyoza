@@ -1,47 +1,51 @@
-# 🥟 Zyoza Protocol Specification (`v1`)
+# Zyoza Protocol Specification (`v2.0`)
 
-Zyoza is a modular **Shielded State Object** protocol on Zcash—launching first for **NFTs (`NFT1`)**, immediately extensible to **ticketing (`TKT1`)**, **credentials (`CRD1`)**, and **gaming/RWAs**, live today on **Orchard**, and upgrade-compatible with **ZSA (ZIP 226/227)** and **Tachyon + Ragu (non-uniform PCD)**.
+Zyoza is a modular **Shielded State Object** protocol on Zcash—launching first for **NFTs (`NFT1`)**, extensible to **ticketing (`TKT1`)**, **soulbound credentials (`CRD1`)**, **cypherpunk gaming items (`GAM1`)**, and **tokenized real-world deeds (`RWA1`)**.
 
----
-
-## 1. ZIP 227-Compatible `AssetId` & `AssetBase` Derivation
-
-Every Zyoza object derives its 32-byte `AssetId` deterministically from its issuer verification key and canonical asset description bytes, matching ZIP 227's domain-separated structure:
-
-1. **Description Hash:**
-   `desc_hash = BLAKE2b-256(personal = "ZSA-AssetDesc___", input = asset_desc)`
-2. **Asset Identifier (`AssetId`):**
-   `asset_id = BLAKE2b-256(personal = "ZSA-AssetId_____", input = issuer_vk || desc_hash)`
-3. **Asset Base (OrchardZSA Phase 4):**
-   `asset_base = GroupHash("z.cash:OrchardZSA", asset_id)` on the Pallas curve.
-
-Because `asset_id` is derived identically in Phase 1 (Orchard single-use seal) and Phase 4 (native OrchardZSA), existing objects crystallize 1:1 into native L1 ZSA notes without breaking identity or provenance.
+> **Implementation Boundary:** Cryptographic primitives (`AssetDigest`/`AssetBase`, 512-byte ZIP 302 codec, `ChaCha20Poly1305` + Pallas ECDH key wrapping, `tachyon-zcash/ragu` recursive PCD, Halo2 range/migration proofs, and 2-of-3 Pallas Schnorr threshold signing) are implemented and tested in Rust; Orchard, ZSA, and Tachyon ledger adapters currently execute in memory (`Simulated`).
 
 ---
 
-## 2. 512-Byte Orchard Memo Seal Binary Layout
+## 1. ZIP 227-Aligned `AssetDigest`, `AssetId`, and `AssetBase`
 
-In Phase 1, each mint or transfer anchors a single-use seal inside an Orchard action's 512-byte encrypted memo field:
+Every Zyoza object derives its 64-byte `AssetDigest`, 32-byte `AssetId`, and Pallas curve point `AssetBase` deterministically from its issuer key (`ik`) and canonical asset description bytes, matching **ZIP 227**:
+
+1. **Description Collision-Resistant Hash (`32 bytes`):**
+   `desc_hash = BLAKE2b-256(personal = "ZSA-AssetDescCRH", input = asset_desc)`
+2. **ZIP 227 Asset Digest (`64 bytes`, version byte `0x00`):**
+   `asset_digest = BLAKE2b-512(personal = "ZSA-Asset-Digest", input = [0x00] || ik || desc_hash)`
+3. **Compact Stage I Seal Identifier (`32 bytes`):**
+   `asset_id = asset_digest[0..32]`
+4. **OrchardZSA Value Commitment Base (Pallas Point):**
+   `asset_base = GroupHash^P(domain = "z.cash:OrchardZSA", input = asset_digest)`
+
+Because `asset_digest` and `asset_base` follow ZIP 227 from genesis, Stage I single-use seals crystallize 1:1 into Stage II native OrchardZSA notes (`value = 1`, `finalized = true`) without re-keying identity.
+
+---
+
+## 2. 512-Byte ZIP 302 Orchard Memo Seal Binary Layout
+
+Per **ZIP 302**, memos starting with `0xFF` indicate arbitrary non-text binary application data so standard Zcash wallets never render binary seals as garbled UTF-8. Each Stage I transition packs a 512-byte seal with magic `[0xFF, 'Z', 'Y', 'O', 'Z']`:
 
 | Offset (bytes) | Size | Field | Type / Encoding | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `0..4` | 4 | `magic` | `[u8; 4]` | ASCII `"ZYOZ"` (`0x5a594f5a`) |
-| `4..6` | 2 | `version` | `u16` (BE) | Protocol version (`0x0001`) |
-| `6..10` | 4 | `profile_id` | `[u8; 4]` | Vertical ID (e.g. `"NFT1"`, `"TKT1"`, `"CRD1"`) |
-| `10..42` | 32 | `asset_id` | `[u8; 32]` | ZIP 227-derived `AssetId` |
-| `42..74` | 32 | `state_root` | `[u8; 32]` | Commitment to current off-chain state |
-| `74..106` | 32 | `nonce` | `[u8; 32]` | Per-transition random/sequential nonce |
-| `106..138` | 32 | `oob_pointer_hash` | `[u8; 32]` | BLAKE2b-256 hash of the canonical OOB envelope |
-| `138..140` | 2 | `oob_uri_len` | `u16` (BE) | Byte length of `oob_uri` (`0..=372`) |
-| `140..512` | 372 | `oob_uri_bytes` | `[u8; 372]` | UTF-8 OOB pointer URI/CID, zero-padded |
+| `0..5` | 5 | `magic` | `[u8; 5]` | `[0xFF, b'Z', b'Y', b'O', b'Z']` (`ff5a594f5a`) |
+| `5..7` | 2 | `version` | `u16` (BE) | Protocol version (`0x0001`) |
+| `7..11` | 4 | `profile_id` | `[u8; 4]` | Vertical ID (`"NFT1"`, `"TKT1"`, `"CRD1"`, `"GAM1"`, `"RWA1"`) |
+| `11..43` | 32 | `asset_id` | `[u8; 32]` | `AssetDigest[0..32]` |
+| `43..75` | 32 | `state_root` | `[u8; 32]` | `SHA-256` commitment to canonical off-chain profile state |
+| `75..107` | 32 | `nonce` | `[u8; 32]` | Per-transition randomness |
+| `107..139` | 32 | `oob_pointer_hash` | `[u8; 32]` | `BLAKE2b-256` integrity hash of the `OobEnvelope` |
+| `139..141` | 2 | `oob_uri_len` | `u16` (BE) | Byte length of `oob_uri` (`0..=371`) |
+| `141..512` | 371 | `oob_uri_bytes` | `[u8; 371]` | UTF-8 OOB pointer URI/CID, zero-padded |
 
-Total: `4 + 2 + 4 + 32 + 32 + 32 + 32 + 2 + 372 = 512` bytes.
+Total: `5 + 2 + 4 + 32 + 32 + 32 + 32 + 2 + 371 = 512` bytes.
 
 ---
 
-## 3. Out-of-Band (OOB) Envelope Schema
+## 3. Out-of-Band (OOB) Envelope Schema (`zyoza-oob`)
 
-Heavy payloads (encrypted art/media, metadata manifests, provenance proofs, and wrapped decryption keys) travel out-of-band, aligning with **Tachyon's** removal of in-band secret distribution:
+Heavy payloads (encrypted media, metadata manifests, and Ragu recursive proofs) travel out-of-band, aligning with **Project Tachyon's** removal of in-band 512-byte encrypted memos:
 
 ```json
 {
@@ -56,37 +60,40 @@ Heavy payloads (encrypted art/media, metadata manifests, provenance proofs, and 
   "wrapped_key": {
     "scheme": "ecdh-pallas-hkdf-sha256",
     "ephemeral_pk": "<64-char hex>",
-    "ciphertext_b64": "<base64 wrapped symmetric key>"
+    "wrap_nonce": "<24-char hex>",
+    "ciphertext_b64": "<base64 wrapped 32B DEK>"
   },
   "integrity_hash": "<64-char hex>"
 }
 ```
 
+Transfers call `OobEnvelope::rewrap_for_recipient`, unwrapping only the 32-byte `DEK` and re-encapsulating it to the recipient's Pallas public key without re-encrypting or re-uploading media blobs.
+
 ---
 
-## 4. Core Trait Boundaries (`zyoza-core`)
+## 4. Core Trait Boundaries (`zyoza-core`) & Ragu Circuits (`zyoza-proofs`)
 
-1. **`AssetProfile`** — Vertical-specific schema, transition validation, and selective-disclosure preview (`NFT1`, `TKT1`, `CRD1`).
-2. **`SettlementAdapter`** — Swappable L1 anchor (`orchard_seal` → `orchard_zsa` → `tachyon`).
-3. **`ProofEngine`** — Swappable ZK prover/verifier (`halo2` → `ragu` non-uniform PCD).
+1. **`AssetProfile`** — Vertical-specific schema, transition validation, and `ObjectViewingKey` selective-disclosure preview (`NFT1`, `TKT1`, `CRD1`, `GAM1`, `RWA1`).
+2. **`SettlementAdapter`** — Swappable anchor backend (`OrchardSealAdapter` -> `OrchardZsaAdapter` -> `TachyonAdapter`).
+3. **`ProofEngine`** — Implemented by both `RaguPcdEngine` (`tachyon-zcash/ragu`, `Application<Pasta, WalletRank, 5>`, `7,168 B` `CompressedProof<Pasta>`) and `Halo2ProofEngine` (`halo2_proofs` IPA `k = 6`).
 
 ---
 
 ## 5. Canonical Test Vectors
 
-### Vector 1: `AssetId::derive`
+### Vector 1: `AssetDigest::derive` & `AssetId::derive`
 * **Inputs:**
   * `issuer_vk`: `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa` (`[0xaa; 32]`)
   * `asset_desc`: `7a796f7a613a6e66743a67656e657369733a30303031` (`"zyoza:nft:genesis:0001"`)
-* **Output (`asset_id`):**
-  * `4dc1131d5acc7767bdb447240316d5a8f7294b8f80ce90416b7e8fecc1870aa6` *(verified by `zyoza-core::tests::canonical_asset_id_and_seal_roundtrip`)*
+* **Output (`asset_id = asset_digest[0..32]`):**
+  * `042c6151e59c2efb60192f1f1f8eb02c985b9b51bce636058ebb755db8634854` *(verified by `zyoza_core::tests::canonical_asset_id_and_seal_roundtrip`)*
 
-### Vector 2: `OrchardMemoSeal` Header (512 bytes)
-* `magic`: `5a594f5a` (`"ZYOZ"`)
-* `version`: `0001`
-* `profile_id`: `4e465431` (`"NFT1"`)
-* `asset_id`: `4dc1131d5acc7767bdb447240316d5a8f7294b8f80ce90416b7e8fecc1870aa6`
-* `state_root`: `1111...1111` (`[0x11; 32]`)
-* `nonce`: `2222...2222` (`[0x22; 32]`)
-* `oob_pointer_hash`: `3333...3333` (`[0x33; 32]`)
-* `oob_uri`: `"ipfs://bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi"` (`oob_uri_len = 0x0042` = 66 bytes, remaining 306 bytes zero-padded)
+### Vector 2: `OrchardMemoSeal` Binary Header (`512 bytes`)
+* `magic` (`0..5`): `ff5a594f5a` (`0xFF || "ZYOZ"`)
+* `version` (`5..7`): `0001`
+* `profile_id` (`7..11`): `4e465431` (`"NFT1"`)
+* `asset_id` (`11..43`): `042c6151e59c2efb60192f1f1f8eb02c985b9b51bce636058ebb755db8634854`
+* `state_root` (`43..75`): `1111...1111` (`[0x11; 32]`)
+* `nonce` (`75..107`): `2222...2222` (`[0x22; 32]`)
+* `oob_pointer_hash` (`107..139`): `3333...3333` (`[0x33; 32]`)
+* `oob_uri` (`139..512`): `"ipfs://bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi"` (`oob_uri_len = 0x0042` = 66 bytes, remaining 305 bytes zero-padded)

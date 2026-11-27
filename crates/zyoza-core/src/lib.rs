@@ -7,7 +7,7 @@ pub mod error;
 pub mod traits;
 pub mod types;
 
-pub use asset_id::{AssetBase, AssetDesc, AssetId};
+pub use asset_id::{AssetBase, AssetDesc, AssetDigest, AssetId};
 pub use collection::{CollectionSpec, MintClaim};
 pub use disclosure::{DisclosureBundle, ObjectViewingKey};
 pub use error::ZyozaError;
@@ -158,16 +158,14 @@ mod tests {
     fn canonical_asset_id_and_seal_roundtrip() {
         let issuer_vk = [0xAA; 32];
         let asset_desc = b"zyoza:nft:genesis:0001";
-        let asset_id = AssetId::derive(&issuer_vk, asset_desc);
-
+        let digest = AssetDigest::derive(&issuer_vk, asset_desc);
+        let (asset_id, base_full) = AssetId::derive_with_base(&issuer_vk, asset_desc);
+        assert_eq!(&digest.0[..32], &asset_id.0);
+        assert_eq!(base_full, AssetBase::from_digest(&digest));
         assert_eq!(
             asset_id.to_hex(),
-            "4dc1131d5acc7767bdb447240316d5a8f7294b8f80ce90416b7e8fecc1870aa6"
+            "042c6151e59c2efb60192f1f1f8eb02c985b9b51bce636058ebb755db8634854"
         );
-
-        let base1 = asset_id.to_asset_base();
-        let base2 = AssetBase::from_asset_id(&asset_id);
-        assert_eq!(base1, base2);
 
         let seal = OrchardMemoSeal {
             version: PROTOCOL_VERSION,
@@ -181,7 +179,8 @@ mod tests {
 
         let bytes = seal.to_bytes().expect("seal serializes to 512 bytes");
         assert_eq!(bytes.len(), ORCHARD_MEMO_LEN);
-        assert_eq!(&bytes[0..4], b"ZYOZ");
+        assert_eq!(&bytes[0..5], &[0xFF, b'Z', b'Y', b'O', b'Z']);
+        assert!(std::str::from_utf8(&bytes).is_err(), "ZIP 302 leading 0xFF prevents UTF-8 parsing");
 
         let parsed = OrchardMemoSeal::from_bytes(&bytes).expect("seal parses cleanly");
         assert_eq!(parsed, seal);
@@ -254,6 +253,7 @@ mod tests {
             .prove_ownership(&OwnershipProofRequest {
                 asset_id,
                 collection_root: [0x99; 32],
+                merkle_siblings: vec![],
                 secret_witness: vec![1, 2, 3],
                 challenge: [0xAB; 32],
             })
