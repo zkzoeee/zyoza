@@ -38,6 +38,7 @@ pub fn gallery_router(gallery: SharedGallery) -> Router {
     let app_state = Arc::new(Mutex::new((gallery, DemoWorkbench::default())));
     Router::new()
         .route("/", get(index_page))
+        .route("/logo.png", get(logo_image))
         .route("/demo", get(demo_page))
         .route("/whitepaper", get(whitepaper_page))
         .route("/api/listings", get(list_listings).post(create_listing))
@@ -56,6 +57,13 @@ type CombinedState = Arc<Mutex<(SharedGallery, DemoWorkbench)>>;
 
 async fn index_page() -> Html<&'static str> {
     Html(include_str!("index.html"))
+}
+
+async fn logo_image() -> impl IntoResponse {
+    (
+        [(axum::http::header::CONTENT_TYPE, "image/png")],
+        include_bytes!("logo.png").as_slice(),
+    )
 }
 
 async fn demo_page() -> Html<&'static str> {
@@ -221,8 +229,8 @@ mod tests {
         let state = Arc::new(Mutex::new(GalleryService::default()));
         let app = gallery_router(state);
 
-        // Landing, Demo & Whitepaper routes return 200 OK
-        for uri in ["/", "/demo", "/whitepaper"] {
+        // Landing, Logo, Demo & Whitepaper routes return 200 OK
+        for uri in ["/", "/logo.png", "/demo", "/whitepaper"] {
             let resp = app
                 .clone()
                 .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())

@@ -33,7 +33,7 @@
     header { border-bottom: 1px solid var(--line); padding: 1.25rem 0; background: var(--card); }
     .nav { display: flex; align-items: center; justify-content: space-between; }
     .brand { display: flex; align-items: center; gap: 0.65rem; font-family: var(--serif); font-size: 1.22rem; font-weight: 600; letter-spacing: 0.02em; }
-    .brand svg { width: 30px; height: 30px; }
+    .brand img { width: 36px; height: 36px; border-radius: 6px; object-fit: cover; border: 1px solid var(--line); }
     .nav-links { display: flex; gap: 1.65rem; font-size: 0.9rem; color: var(--muted); align-items: center; }
     .nav-links a:hover { color: var(--ink); }
     .nav-cta { color: var(--ink) !important; border-bottom: 1px solid var(--accent); padding-bottom: 2px; font-weight: 500; }
@@ -106,11 +106,7 @@
   <header>
     <div class="wrap nav">
       <a href="/" class="brand">
-        <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Zyoza Dumpling Logo">
-          <path d="M4 21C4 13.5 9.5 8 16 8C22.5 8 28 13.5 28 21C28 22.7 26.7 24 25 24H7C5.3 24 4 22.7 4 21Z" fill="#F2E8D5" stroke="#171614" stroke-width="2"/>
-          <path d="M9 10.5L11 13.5M16 8V12.5M23 10.5L21 13.5" stroke="#C53D2F" stroke-width="2" stroke-linecap="round"/>
-          <path d="M7 20.5H25" stroke="#171614" stroke-width="1.5" stroke-dasharray="2 2"/>
-        </svg>
+        <img src="/logo.png" onerror="this.onerror=null;this.src='logo.png'" alt="Zyoza Dumpling Logo" />
         <span>Zyoza</span>
       </a>
       <nav class="nav-links">
@@ -392,37 +388,41 @@
       const frame = shades === 'mesh' ? '#22C55E' : (shades === 'ovk' ? '#C53D2F' : '#F4B728');
       let lenses = '';
       if (shades === 'venetian') {
+        // Fill lens interior with frame color, then cut 3 crisp 1-unit black lines (y = 11, 13, 15)
+        lenses += `<rect x="9" y="11" width="5" height="5" fill="${frame}"/>`;
+        lenses += `<rect x="17" y="11" width="5" height="5" fill="${frame}"/>`;
         for (const y of [11, 13, 15]) {
-          lenses += `<rect x="9" y="${y}" width="5" height="1" fill="${frame}"/>`;
-          lenses += `<rect x="18" y="${y}" width="5" height="1" fill="${frame}"/>`;
+          lenses += `<rect x="9" y="${y}" width="5" height="1" fill="#0E1015"/>`;
+          lenses += `<rect x="17" y="${y}" width="5" height="1" fill="#0E1015"/>`;
         }
       } else if (shades === 'mesh') {
         for (let y = 11; y <= 15; y++) {
           for (let x = 9; x <= 13; x++) if ((x + y) % 2 === 0) lenses += `<rect x="${x}" y="${y}" width="1" height="1" fill="${frame}"/>`;
-          for (let x = 18; x <= 22; x++) if ((x + y) % 2 === 0) lenses += `<rect x="${x}" y="${y}" width="1" height="1" fill="${frame}"/>`;
+          for (let x = 17; x <= 21; x++) if ((x + y) % 2 === 0) lenses += `<rect x="${x}" y="${y}" width="1" height="1" fill="${frame}"/>`;
         }
       } else {
+        lenses += `<rect x="9" y="11" width="5" height="5" fill="${frame}"/>`;
         for (const y of [11, 13, 15]) {
-          lenses += `<rect x="9" y="${y}" width="5" height="1" fill="${frame}"/>`;
+          lenses += `<rect x="9" y="${y}" width="5" height="1" fill="#0E1015"/>`;
         }
         // Classic Nouns 2-tone eye on right lens (OVK selectively disclosed!)
-        lenses += `<rect x="18" y="11" width="2" height="5" fill="#FFFFFF"/>`;
-        lenses += `<rect x="20" y="11" width="3" height="5" fill="#111111"/>`;
+        lenses += `<rect x="17" y="11" width="2" height="5" fill="#FFFFFF"/>`;
+        lenses += `<rect x="19" y="11" width="3" height="5" fill="#111111"/>`;
       }
 
-      // Authentic Nouns Noggles with 2px Left Ear-Hook (x=3..4 dropping down y=13..16)
+      // Authentic 1-unit Nouns Noggles: 1-unit left hook (x=5) + 1-unit bridge (x=15)
       const noggles = `
-        <!-- Left Temple Arm + Downward Nouns Ear-Hook (⌐) -->
-        <rect x="3" y="12" width="5" height="2" fill="${frame}"/>
-        <rect x="3" y="14" width="2" height="3" fill="${frame}"/>
-        <!-- Bridge -->
-        <rect x="15" y="12" width="2" height="2" fill="${frame}"/>
-        <!-- Left & Right 7x7 Outer Frames -->
+        <!-- 1-Unit Left Temple Arm + 1-Unit Downward Ear-Hook (⌐) -->
+        <rect x="5" y="12" width="3" height="1" fill="${frame}"/>
+        <rect x="5" y="13" width="1" height="2" fill="${frame}"/>
+        <!-- 1-Unit Bridge -->
+        <rect x="15" y="12" width="1" height="1" fill="${frame}"/>
+        <!-- Left (x=8..14) & Right (x=16..22) 7x7 Outer Frames -->
         <rect x="8" y="10" width="7" height="7" fill="${frame}"/>
-        <rect x="17" y="10" width="7" height="7" fill="${frame}"/>
+        <rect x="16" y="10" width="7" height="7" fill="${frame}"/>
         <!-- Dark Lens Backing -->
         <rect x="9" y="11" width="5" height="5" fill="#0E1015"/>
-        <rect x="18" y="11" width="5" height="5" fill="#0E1015"/>
+        <rect x="17" y="11" width="5" height="5" fill="#0E1015"/>
         ${lenses}
       `;
 

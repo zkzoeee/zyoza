@@ -23,7 +23,7 @@
     a { color: inherit; text-decoration: none; }
     header { border-bottom: 1px solid var(--line); padding: 1.1rem 2rem; display: flex; justify-content: space-between; align-items: center; background: var(--card); }
     .brand { display: flex; align-items: center; gap: 0.65rem; font-family: var(--serif); font-size: 1.15rem; font-weight: 600; }
-    .brand svg { width: 28px; height: 28px; }
+    .brand img { width: 34px; height: 34px; border-radius: 6px; object-fit: cover; border: 1px solid var(--line); }
     .nav-links { display: flex; gap: 1.4rem; font-size: 0.88rem; color: var(--muted); }
     .nav-links a:hover { color: var(--ink); }
 
@@ -72,11 +72,7 @@
 <body>
   <header>
     <a href="/" class="brand">
-      <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M4 21C4 13.5 9.5 8 16 8C22.5 8 28 13.5 28 21C28 22.7 26.7 24 25 24H7C5.3 24 4 22.7 4 21Z" fill="#F2E8D5" stroke="#171614" stroke-width="2"/>
-        <path d="M9 10.5L11 13.5M16 8V12.5M23 10.5L21 13.5" stroke="#C53D2F" stroke-width="2" stroke-linecap="round"/>
-        <path d="M7 20.5H25" stroke="#171614" stroke-width="1.5" stroke-dasharray="2 2"/>
-      </svg>
+      <img src="/logo.png" onerror="this.onerror=null;this.src='logo.png'" alt="Zyoza Dumpling Logo" />
       <span>Zyoza Studio</span>
     </a>
     <nav class="nav-links">
@@ -293,30 +289,32 @@
       const frame = p === 'nounz-mesh' ? '#22C55E' : (p === 'nounz-ovk' ? '#C53D2F' : '#F4B728');
       let lenses = '';
       if (p === 'nounz-venetian') {
+        lenses += `<rect x="9" y="11" width="5" height="5" fill="${frame}"/><rect x="17" y="11" width="5" height="5" fill="${frame}"/>`;
         for (const y of [11, 13, 15]) {
-          lenses += `<rect x="9" y="${y}" width="5" height="1" fill="${frame}"/><rect x="18" y="${y}" width="5" height="1" fill="${frame}"/>`;
+          lenses += `<rect x="9" y="${y}" width="5" height="1" fill="#0E1015"/><rect x="17" y="${y}" width="5" height="1" fill="#0E1015"/>`;
         }
       } else if (p === 'nounz-mesh') {
         for (let y = 11; y <= 15; y++) {
           for (let x = 9; x <= 13; x++) if ((x + y) % 2 === 0) lenses += `<rect x="${x}" y="${y}" width="1" height="1" fill="${frame}"/>`;
-          for (let x = 18; x <= 22; x++) if ((x + y) % 2 === 0) lenses += `<rect x="${x}" y="${y}" width="1" height="1" fill="${frame}"/>`;
+          for (let x = 17; x <= 21; x++) if ((x + y) % 2 === 0) lenses += `<rect x="${x}" y="${y}" width="1" height="1" fill="${frame}"/>`;
         }
       } else {
-        for (const y of [11, 13, 15]) lenses += `<rect x="9" y="${y}" width="5" height="1" fill="${frame}"/>`;
-        lenses += `<rect x="18" y="11" width="2" height="5" fill="#FFFFFF"/><rect x="20" y="11" width="3" height="5" fill="#111111"/>`;
+        lenses += `<rect x="9" y="11" width="5" height="5" fill="${frame}"/>`;
+        for (const y of [11, 13, 15]) lenses += `<rect x="9" y="${y}" width="5" height="1" fill="#0E1015"/>`;
+        lenses += `<rect x="17" y="11" width="2" height="5" fill="#FFFFFF"/><rect x="19" y="11" width="3" height="5" fill="#111111"/>`;
       }
 
       svg.innerHTML = `
         <rect width="32" height="32" fill="${bg}"/>
         ${headSvg}
-        <!-- Nouns Left Ear-Hook (⌐) + Frames -->
-        <rect x="3" y="12" width="5" height="2" fill="${frame}"/>
-        <rect x="3" y="14" width="2" height="3" fill="${frame}"/>
-        <rect x="15" y="12" width="2" height="2" fill="${frame}"/>
+        <!-- 1-Unit Nouns Left Ear-Hook (⌐) + 1-Unit Bridge + Frames -->
+        <rect x="5" y="12" width="3" height="1" fill="${frame}"/>
+        <rect x="5" y="13" width="1" height="2" fill="${frame}"/>
+        <rect x="15" y="12" width="1" height="1" fill="${frame}"/>
         <rect x="8" y="10" width="7" height="7" fill="${frame}"/>
-        <rect x="17" y="10" width="7" height="7" fill="${frame}"/>
+        <rect x="16" y="10" width="7" height="7" fill="${frame}"/>
         <rect x="9" y="11" width="5" height="5" fill="#0E1015"/>
-        <rect x="18" y="11" width="5" height="5" fill="#0E1015"/>
+        <rect x="17" y="11" width="5" height="5" fill="#0E1015"/>
         ${lenses}`;
     }
 

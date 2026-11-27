@@ -25,7 +25,7 @@
     header { border-bottom: 1px solid var(--line); background: var(--card); padding: 1.15rem 2rem; position: sticky; top: 0; z-index: 10; }
     .nav { max-width: 900px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; }
     .brand { display: flex; align-items: center; gap: 0.65rem; font-family: var(--serif); font-size: 1.15rem; font-weight: 600; }
-    .brand svg { width: 28px; height: 28px; }
+    .brand img { width: 34px; height: 34px; border-radius: 6px; object-fit: cover; border: 1px solid var(--line); }
     .nav-links { display: flex; gap: 1.5rem; font-size: 0.88rem; color: var(--muted); }
     .nav-links a:hover { color: var(--ink); }
     .nav-cta { color: var(--ink) !important; border-bottom: 1px solid var(--accent); padding-bottom: 2px; font-weight: 500; }
@@ -70,11 +70,7 @@
   <header>
     <div class="nav">
       <a href="/" class="brand">
-        <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M4 21C4 13.5 9.5 8 16 8C22.5 8 28 13.5 28 21C28 22.7 26.7 24 25 24H7C5.3 24 4 22.7 4 21Z" fill="#F2E8D5" stroke="#171614" stroke-width="2"/>
-          <path d="M9 10.5L11 13.5M16 8V12.5M23 10.5L21 13.5" stroke="#C53D2F" stroke-width="2" stroke-linecap="round"/>
-          <path d="M7 20.5H25" stroke="#171614" stroke-width="1.5" stroke-dasharray="2 2"/>
-        </svg>
+        <img src="/logo.png" onerror="this.onerror=null;this.src='logo.png'" alt="Zyoza Dumpling Logo" />
         <span>Zyoza</span>
       </a>
       <nav class="nav-links">
