@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>🥟 Zyoza — Shielded NFT Gallery</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; background: #0e1015; color: #eceff4; max-width: 860px; margin: 2rem auto; padding: 0 1rem; }
+    h1 { font-size: 1.6rem; }
+    .card { background: #171a22; border: 1px solid #2a2f3d; border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 1rem; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.78rem; background: #1f4d3a; color: #7ee787; }
+    button { background: #f4b728; color: #111; border: none; padding: 6px 12px; border-radius: 6px; font-weight: 600; cursor: pointer; }
+    input { background: #0e1015; color: #eceff4; border: 1px solid #2a2f3d; border-radius: 6px; padding: 6px 8px; margin-right: 6px; }
+  </style>
+</head>
+<body>
+  <h1>🥟 Zyoza — Opt-In Viewing-Key Gallery &amp; Sealed-Bid Demo</h1>
+  <p>Listings are unlocked selectively via <code>ObjectViewingKey</code> and verified with Halo2 Pasta ZK ownership proofs.</p>
+  <div id="listings">Loading listings...</div>
+  <script>
+    async function load() {
+      const res = await fetch('/api/listings');
+      const items = await res.json();
+      const root = document.getElementById('listings');
+      if (!items.length) { root.innerHTML = '<div class="card">No shielded listings yet. POST to <code>/api/listings</code> to publish one.</div>'; return; }
+      root.innerHTML = items.map(l => `
+        <div class="card">
+          <h3>#${l.listing_id} — ${l.preview.title} ${l.zk_verified_ownership ? '<span class="badge">ZK Verified</span>' : ''}</h3>
+          <p>${l.preview.summary}</p>
+          <p><strong>Reserve:</strong> ${l.reserve_zatoshis} zats | <strong>Bids:</strong> ${l.bids.length} | <strong>Cleared:</strong> ${l.cleared}</p>
+          <input id="bidder-${l.listing_id}" placeholder="bidder id" />
+          <input id="amt-${l.listing_id}" type="number" placeholder="zatoshis" />
+          <button onclick="bid(${l.listing_id})">Submit Sealed Bid</button>
+          <button onclick="clearAuction(${l.listing_id})">Clear Auction</button>
+        </div>`).join('');
+    }
+    async function bid(id) {
+      const bidder_id = document.getElementById(`bidder-${id}`).value || 'anon';
+      const bid_zatoshis = Number(document.getElementById(`amt-${id}`).value || 0);
+      await fetch(`/api/listings/${id}/bids`, {
+        method: 'POST', headers: {'content-type': 'application/json'},
+        body: JSON.stringify({ bidder_id, shielded_zec_commitment: Array(32).fill(1), bid_zatoshis })
+      });
+      load();
+    }
+    async function clearAuction(id) {
+      const r = await fetch(`/api/listings/${id}/clear`, { method: 'POST' });
+      alert(await r.text());
+      load();
+    }
+    load();
+  </script>
+</body>
+</html>

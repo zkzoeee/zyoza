@@ -1,0 +1,22 @@
+[package]
+name = "zyoza-oob"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+base64.workspace = true
+blake2b_simd.workspace = true
+chacha20poly1305.workspace = true
+ff.workspace = true
+group.workspace = true
+zyoza-core.workspace = true
+hex.workspace = true
+hkdf.workspace = true
+pasta_curves.workspace = true
+rand.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true

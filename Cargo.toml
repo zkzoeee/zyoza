@@ -1,0 +1,57 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/zyoza-core",
+    "crates/zyoza-oob",
+    "crates/zyoza-settlement",
+    "crates/zyoza-proofs",
+    "crates/zyoza-profile-nft",
+    "crates/zyoza-profile-ticket",
+    "crates/zyoza-profile-cred",
+    "crates/zyoza-profile-gaming",
+    "crates/zyoza-profile-rwa",
+    "crates/zyoza-sdk",
+    "crates/zyoza-cli",
+    "crates/zyoza-wasm",
+    "apps/gallery-demo",
+]
+
+[workspace.package]
+edition = "2021"
+rust-version = "1.88"
+license = "MIT OR Apache-2.0"
+version = "0.1.0"
+
+[workspace.dependencies]
+anyhow = "1.0"
+axum = "0.8"
+base64 = "0.22"
+blake2b_simd = "1"
+chacha20poly1305 = "0.10"
+clap = { version = "4.5", features = ["derive"] }
+ff = "0.14"
+group = "0.14"
+halo2_proofs = "0.4"
+hex = "0.4"
+hkdf = "0.12"
+orchard = { version = "0.16", default-features = false, features = ["std"] }
+pasta_curves = "0.6"
+rand = "0.10"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+thiserror = "2.0"
+tokio = { version = "1", features = ["full"] }
+tower = "0.5"
+wasm-bindgen = "0.2"
+
+zyoza-core = { path = "crates/zyoza-core" }
+zyoza-oob = { path = "crates/zyoza-oob" }
+zyoza-settlement = { path = "crates/zyoza-settlement" }
+zyoza-proofs = { path = "crates/zyoza-proofs" }
+zyoza-profile-nft = { path = "crates/zyoza-profile-nft" }
+zyoza-profile-ticket = { path = "crates/zyoza-profile-ticket" }
+zyoza-profile-cred = { path = "crates/zyoza-profile-cred" }
+zyoza-profile-gaming = { path = "crates/zyoza-profile-gaming" }
+zyoza-profile-rwa = { path = "crates/zyoza-profile-rwa" }
+zyoza-sdk = { path = "crates/zyoza-sdk" }
