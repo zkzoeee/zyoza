@@ -225,7 +225,7 @@
 
   <div id="busy-bar" class="busy-bar" role="status" aria-live="polite">
     <div class="spinner"></div>
-    <span id="busy-text">Running Ragu prover...</span>
+    <span id="busy-text">Steamed to order · running the Ragu prover</span>
   </div>
 
   <div class="studio-bar">
@@ -537,11 +537,11 @@
       const bar = document.getElementById('busy-bar');
       const txt = document.getElementById('busy-text');
       const t0 = performance.now();
-      txt.textContent = `${label} (0.0s elapsed)`;
+      txt.textContent = `Steamed to order · ${label} (0.0s)`;
       bar.classList.add('active');
       const timer = setInterval(() => {
         const sec = ((performance.now() - t0) / 1000).toFixed(1);
-        txt.textContent = `${label} (${sec}s elapsed)`;
+        txt.textContent = `Steamed to order · ${label} (${sec}s)`;
       }, 150);
       try {
         return await fn();
