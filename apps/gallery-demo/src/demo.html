@@ -289,32 +289,32 @@
       const frame = p === 'nounz-mesh' ? '#22C55E' : (p === 'nounz-ovk' ? '#C53D2F' : '#F4B728');
       let lenses = '';
       if (p === 'nounz-venetian') {
-        lenses += `<rect x="9" y="11" width="5" height="5" fill="${frame}"/><rect x="17" y="11" width="5" height="5" fill="${frame}"/>`;
+        lenses += `<rect x="10" y="11" width="5" height="5" fill="${frame}"/><rect x="18" y="11" width="5" height="5" fill="${frame}"/>`;
         for (const y of [11, 13, 15]) {
-          lenses += `<rect x="9" y="${y}" width="5" height="1" fill="#0E1015"/><rect x="17" y="${y}" width="5" height="1" fill="#0E1015"/>`;
+          lenses += `<rect x="10" y="${y}" width="5" height="1" fill="#0E1015"/><rect x="18" y="${y}" width="5" height="1" fill="#0E1015"/>`;
         }
       } else if (p === 'nounz-mesh') {
         for (let y = 11; y <= 15; y++) {
-          for (let x = 9; x <= 13; x++) if ((x + y) % 2 === 0) lenses += `<rect x="${x}" y="${y}" width="1" height="1" fill="${frame}"/>`;
-          for (let x = 17; x <= 21; x++) if ((x + y) % 2 === 0) lenses += `<rect x="${x}" y="${y}" width="1" height="1" fill="${frame}"/>`;
+          for (let x = 10; x <= 14; x++) if ((x + y) % 2 === 0) lenses += `<rect x="${x}" y="${y}" width="1" height="1" fill="${frame}"/>`;
+          for (let x = 18; x <= 22; x++) if ((x + y) % 2 === 0) lenses += `<rect x="${x}" y="${y}" width="1" height="1" fill="${frame}"/>`;
         }
       } else {
-        lenses += `<rect x="9" y="11" width="5" height="5" fill="${frame}"/>`;
-        for (const y of [11, 13, 15]) lenses += `<rect x="9" y="${y}" width="5" height="1" fill="#0E1015"/>`;
-        lenses += `<rect x="17" y="11" width="2" height="5" fill="#FFFFFF"/><rect x="19" y="11" width="3" height="5" fill="#111111"/>`;
+        lenses += `<rect x="10" y="11" width="5" height="5" fill="${frame}"/>`;
+        for (const y of [11, 13, 15]) lenses += `<rect x="10" y="${y}" width="5" height="1" fill="#0E1015"/>`;
+        lenses += `<rect x="18" y="11" width="2" height="5" fill="#FFFFFF"/><rect x="20" y="11" width="3" height="5" fill="#111111"/>`;
       }
 
       svg.innerHTML = `
         <rect width="32" height="32" fill="${bg}"/>
         ${headSvg}
-        <!-- 1-Unit Nouns Left Ear-Hook (⌐) + 1-Unit Bridge + Frames -->
-        <rect x="5" y="12" width="3" height="1" fill="${frame}"/>
-        <rect x="5" y="13" width="1" height="2" fill="${frame}"/>
-        <rect x="15" y="12" width="1" height="1" fill="${frame}"/>
-        <rect x="8" y="10" width="7" height="7" fill="${frame}"/>
-        <rect x="16" y="10" width="7" height="7" fill="${frame}"/>
-        <rect x="9" y="11" width="5" height="5" fill="#0E1015"/>
-        <rect x="17" y="11" width="5" height="5" fill="#0E1015"/>
+        <!-- 1-Unit Nouns Left Ear-Hook (⌐) + 1-Unit Bridge + Frames (shifted +1 right) -->
+        <rect x="6" y="12" width="3" height="1" fill="${frame}"/>
+        <rect x="6" y="13" width="1" height="2" fill="${frame}"/>
+        <rect x="16" y="12" width="1" height="1" fill="${frame}"/>
+        <rect x="9" y="10" width="7" height="7" fill="${frame}"/>
+        <rect x="17" y="10" width="7" height="7" fill="${frame}"/>
+        <rect x="10" y="11" width="5" height="5" fill="#0E1015"/>
+        <rect x="18" y="11" width="5" height="5" fill="#0E1015"/>
         ${lenses}`;
     }
 
