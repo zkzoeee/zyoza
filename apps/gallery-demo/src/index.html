@@ -3,19 +3,19 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="Zyoza is a proof-carrying shielded state object protocol for Zcash — mint, transfer, selectively disclose, and trade private NFTs, tickets, and credentials using Ragu recursive PCD and Pallas ECDH." />
-  <meta property="og:title" content="Zyoza — Proof-Carrying Shielded Objects on Zcash" />
-  <meta property="og:description" content="Mint, trade, and prove ownership of private NFTs, event tickets, and credentials on Zcash without exposing your wallet." />
+  <meta name="description" content="Zyoza lets you mint, trade and prove ownership of private collectibles, tickets and credentials on Zcash without exposing your wallet. Research prototype built on Ragu recursive proofs." />
+  <meta property="og:title" content="Zyoza — Proof-carrying objects on Zcash" />
+  <meta property="og:description" content="Mint, trade and prove ownership of collectibles, tickets and credentials on Zcash without exposing your wallet." />
   <meta property="og:type" content="website" />
   <meta property="og:image" content="/logo.png" />
   <meta name="twitter:card" content="summary" />
   <link rel="icon" href="/logo.png" />
-  <title>Zyoza — Proof-Carrying Shielded Objects on Zcash</title>
+  <title>Zyoza — Proof-carrying objects on Zcash</title>
   <style>
     :root {
       --paper: #F7F4ED;
       --paper-alt: #EFEBE1;
-      --card: #FAF8F3;
+      --card: #FBF9F4;
       --ink: #171614;
       --muted: #5C5852;
       --line: #DDD7C9;
@@ -25,8 +25,10 @@
       --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
       --sans: -apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", sans-serif;
       --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      --header-h: 60px;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
     body {
       background: var(--paper);
       color: var(--ink);
@@ -39,139 +41,205 @@
       outline: 2px solid var(--accent);
       outline-offset: 3px;
     }
-    .wrap { max-width: 1000px; margin: 0 auto; padding: 0 2rem; }
+    .wrap { max-width: 1080px; margin: 0 auto; padding: 0 2rem; }
     @media (max-width: 560px) { .wrap { padding: 0 1.1rem; } }
 
+    /* ── Shared site header (keep identical in index.html, demo.html, doc_template.html) ── */
     .proto-banner {
-      background: #EFE9DA;
-      border-bottom: 1px solid var(--line);
-      padding: 0.5rem 1rem;
+      background: var(--ink);
+      color: #E9E4D8;
+      padding: 0.45rem 1rem;
       font-family: var(--mono);
-      font-size: 0.74rem;
+      font-size: 0.72rem;
+      letter-spacing: 0.01em;
       text-align: center;
-      color: var(--ink);
     }
-    .proto-banner strong { color: var(--accent); }
-    .proto-banner a { border-bottom: 1px solid var(--ink); }
-
-    header { border-bottom: 1px solid var(--line); padding: 1.15rem 0; background: var(--card); }
-    .nav { display: flex; align-items: center; justify-content: space-between; gap: 0.85rem; flex-wrap: wrap; }
-    .brand { display: flex; align-items: center; gap: 0.65rem; font-family: var(--serif); font-size: 1.22rem; font-weight: 600; letter-spacing: 0.02em; }
-    .brand img { width: 36px; height: 36px; border-radius: 6px; object-fit: cover; border: 1px solid var(--line); }
-    .nav-links { display: flex; gap: 1.25rem; font-size: 0.88rem; color: var(--muted); align-items: center; flex-wrap: wrap; }
-    @media (max-width: 560px) {
-      .nav-links { gap: 0.75rem; font-size: 0.81rem; width: 100%; justify-content: space-between; }
+    .proto-banner strong { color: #F4B728; font-weight: 600; }
+    .proto-banner a { border-bottom: 1px solid rgba(233, 228, 216, 0.5); }
+    .site-header {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      background: rgba(251, 249, 244, 0.94);
+      -webkit-backdrop-filter: blur(8px);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--line);
     }
+    .site-nav {
+      max-width: 1160px;
+      height: var(--header-h);
+      margin: 0 auto;
+      padding: 0 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1.5rem;
+    }
+    .brand { display: flex; align-items: center; gap: 0.6rem; font-family: var(--serif); font-size: 1.2rem; font-weight: 600; letter-spacing: 0.01em; color: var(--ink); flex-shrink: 0; }
+    .brand img { width: 34px; height: 34px; border-radius: 6px; object-fit: cover; border: 1px solid var(--line); }
+    .nav-links { display: flex; align-items: center; gap: 0.2rem; font-size: 0.88rem; min-width: 0; }
+    .nav-links a { padding: 0.35rem 0.7rem; color: var(--muted); border-bottom: 2px solid transparent; white-space: nowrap; }
     .nav-links a:hover { color: var(--ink); }
-    .nav-cta { color: var(--ink) !important; border-bottom: 1px solid var(--accent); padding-bottom: 2px; font-weight: 500; }
+    .nav-links a[aria-current="page"] { color: var(--ink); font-weight: 600; border-bottom-color: var(--accent); }
+    .nav-links a.nav-ext { color: var(--muted); font-family: var(--mono); font-size: 0.78rem; }
+    @media (max-width: 720px) {
+      .site-nav { padding: 0 1rem; gap: 0.75rem; }
+      .brand span { display: none; }
+      .nav-links { overflow-x: auto; scrollbar-width: none; }
+      .nav-links::-webkit-scrollbar { display: none; }
+      .nav-links a { padding: 0.35rem 0.55rem; }
+    }
+    /* ── end shared header ── */
+
+    section[id] { scroll-margin-top: calc(var(--header-h) + 1rem); }
 
     /* Hero */
-    .hero { display: grid; grid-template-columns: 1.28fr 0.92fr; gap: 3rem; padding: 4.25rem 0 3.5rem; border-bottom: 1px solid var(--line); align-items: center; }
-    @media (max-width: 800px) { .hero { grid-template-columns: 1fr; padding: 2.75rem 0; gap: 2rem; } }
-    .kicker { font-family: var(--mono); font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.14em; color: var(--accent); margin-bottom: 0.85rem; }
-    h1 { font-family: var(--serif); font-weight: 600; font-size: clamp(2.1rem, 4vw, 3.15rem); line-height: 1.15; letter-spacing: -0.01em; margin-bottom: 1.1rem; }
-    .lead-plain { color: var(--ink); font-size: 1.06rem; max-width: 52ch; margin-bottom: 0.75rem; font-weight: 450; }
-    .subtitle { color: var(--muted); font-size: 0.94rem; max-width: 54ch; margin-bottom: 1.85rem; }
-    .btn-row { display: flex; flex-wrap: wrap; gap: 0.85rem; align-items: center; }
-    .btn { display: inline-block; padding: 0.74rem 1.35rem; font-size: 0.9rem; font-weight: 500; border: 1px solid var(--ink); transition: all 0.15s ease; cursor: pointer; }
+    .hero { display: grid; grid-template-columns: 1.3fr 0.9fr; gap: 3.5rem; padding: 4.5rem 0 4rem; align-items: center; }
+    @media (max-width: 820px) { .hero { grid-template-columns: 1fr; padding: 2.75rem 0 2.5rem; gap: 2.25rem; } }
+    .kicker { font-family: var(--mono); font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.14em; color: var(--accent); margin-bottom: 1rem; }
+    h1 { font-family: var(--serif); font-weight: 600; font-size: clamp(2.3rem, 4.6vw, 3.5rem); line-height: 1.08; letter-spacing: -0.015em; margin-bottom: 1.25rem; }
+    .lead { font-size: 1.14rem; line-height: 1.55; max-width: 48ch; margin-bottom: 0.85rem; }
+    .sublead { color: var(--muted); font-size: 0.97rem; max-width: 52ch; margin-bottom: 2rem; }
+    .btn-row { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
+    .btn { display: inline-block; padding: 0.78rem 1.4rem; font-size: 0.92rem; font-weight: 500; border: 1px solid var(--ink); transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease; cursor: pointer; }
     .btn-primary { background: var(--ink); color: var(--paper); }
     .btn-primary:hover { background: var(--accent); border-color: var(--accent); }
     .btn-ghost { background: transparent; color: var(--ink); border-color: var(--line); }
     .btn-ghost:hover { border-color: var(--ink); background: var(--card); }
+    .text-link { font-size: 0.9rem; color: var(--muted); border-bottom: 1px solid var(--line); margin-left: 0.35rem; }
+    .text-link:hover { color: var(--ink); border-color: var(--ink); }
 
-    /* Specimen Showcase Card */
-    .specimen-card { background: var(--card); border: 1px solid var(--line); padding: 1.4rem; }
-    .specimen-svg { width: 200px; height: 200px; display: block; margin: 0.2rem auto 1rem; border: 1px solid var(--line); background: #D8D3C8; }
-    .trait-label { font-family: var(--mono); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); text-align: center; margin-bottom: 0.35rem; }
-    .pill-row { display: flex; justify-content: center; gap: 0.4rem; margin-bottom: 0.75rem; flex-wrap: wrap; }
-    .pill { font-family: var(--mono); font-size: 0.72rem; padding: 0.25rem 0.55rem; background: var(--paper); border: 1px solid var(--line); cursor: pointer; color: var(--muted); }
+    /* Specimen card */
+    .specimen-card { background: var(--card); border: 1px solid var(--line); padding: 1.5rem; box-shadow: 6px 6px 0 var(--paper-alt); }
+    .specimen-svg { width: 100%; max-width: 220px; height: auto; aspect-ratio: 1; display: block; margin: 0 auto 1.1rem; border: 1px solid var(--line); background: #D8D3C8; }
+    .trait-label { font-family: var(--mono); font-size: 0.67rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); text-align: center; margin-bottom: 0.4rem; }
+    .pill-row { display: flex; justify-content: center; gap: 0.4rem; margin-bottom: 0.85rem; flex-wrap: wrap; }
+    .pill { font-family: var(--mono); font-size: 0.72rem; padding: 0.28rem 0.6rem; background: var(--paper); border: 1px solid var(--line); cursor: pointer; color: var(--muted); }
+    .pill:hover { border-color: var(--muted); }
     .pill.active { border-color: var(--ink); color: var(--ink); font-weight: 600; background: var(--paper-alt); }
-    .specimen-meta { border-top: 1px solid var(--line); padding-top: 0.75rem; margin-top: 0.35rem; font-family: var(--mono); font-size: 0.72rem; color: var(--muted); display: flex; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap; }
+    .specimen-meta { border-top: 1px solid var(--line); padding-top: 0.8rem; margin-top: 0.25rem; font-family: var(--mono); font-size: 0.7rem; color: var(--muted); display: flex; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap; }
 
-    /* Metric Strip */
-    .metrics {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      border-bottom: 1px solid var(--line);
-      background: var(--card);
-      border-left: 1px solid var(--line);
+    /* Metric strip */
+    .metrics { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--line); background: var(--card); }
+    .metric { padding: 1.3rem 1.4rem; border-right: 1px solid var(--line); }
+    .metric:last-child { border-right: none; }
+    @media (max-width: 760px) {
+      .metrics { grid-template-columns: repeat(2, 1fr); }
+      .metric:nth-child(2n) { border-right: none; }
+      .metric:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
     }
-    @media (max-width: 760px) { .metrics { grid-template-columns: repeat(2, 1fr); } }
-    @media (max-width: 420px) { .metrics { grid-template-columns: 1fr; } }
-    .metric { padding: 1.2rem 1.3rem; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-    .metric strong { display: block; font-family: var(--serif); font-size: 1.35rem; color: var(--ink); margin-bottom: 0.15rem; }
-    .metric span { font-family: var(--mono); font-size: 0.71rem; color: var(--muted); display: block; }
+    .metric strong { display: block; font-family: var(--serif); font-size: 1.5rem; line-height: 1.2; margin-bottom: 0.3rem; }
+    .metric span { font-size: 0.82rem; color: var(--muted); display: block; line-height: 1.4; }
 
     /* Sections */
-    .section { padding: 3.6rem 0; border-bottom: 1px solid var(--line); }
-    .section-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 1.85rem; gap: 0.75rem; flex-wrap: wrap; }
-    h2 { font-family: var(--serif); font-weight: 600; font-size: 1.6rem; }
-    .section-note { font-family: var(--mono); font-size: 0.75rem; color: var(--muted); }
+    .section { padding: 4.25rem 0; border-bottom: 1px solid var(--line); }
+    .section:last-of-type { border-bottom: none; }
+    @media (max-width: 560px) { .section { padding: 3rem 0; } }
+    .section-head { max-width: 62ch; margin-bottom: 2.1rem; }
+    .eyebrow { font-family: var(--mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.14em; color: var(--accent); display: block; margin-bottom: 0.55rem; }
+    h2 { font-family: var(--serif); font-weight: 600; font-size: clamp(1.55rem, 2.6vw, 1.95rem); line-height: 1.2; letter-spacing: -0.005em; margin-bottom: 0.6rem; }
+    .section-head p { color: var(--muted); font-size: 0.98rem; }
+    .section-head p a { color: var(--ink); border-bottom: 1px solid var(--line); }
+    .section-head p a:hover { border-color: var(--ink); }
+    h3 { font-family: var(--serif); font-weight: 600; font-size: 1.14rem; line-height: 1.3; }
+    code { font-family: var(--mono); font-size: 0.84em; background: var(--paper-alt); padding: 0.08rem 0.3rem; border: 1px solid var(--line); color: var(--ink); }
 
-    /* Plain-English 3-Step Flow */
-    .how-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
-    @media (max-width: 780px) { .how-grid { grid-template-columns: 1fr; } }
-    .how-card { background: var(--card); border: 1px solid var(--line); padding: 1.45rem; }
-    .how-num { font-family: var(--mono); font-size: 0.74rem; color: var(--accent); margin-bottom: 0.45rem; display: block; }
-    .how-card h3 { font-family: var(--serif); font-size: 1.12rem; margin-bottom: 0.45rem; }
-    .how-card p { font-size: 0.9rem; color: var(--muted); }
+    /* How it works */
+    .how-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; counter-reset: how; }
+    @media (max-width: 800px) { .how-grid { grid-template-columns: 1fr; } }
+    .how-card { background: var(--card); border: 1px solid var(--line); padding: 1.6rem; }
+    .how-num { font-family: var(--serif); font-size: 2rem; line-height: 1; color: var(--accent); display: block; margin-bottom: 0.9rem; }
+    .how-card h3 { margin-bottom: 0.5rem; }
+    .how-card p { font-size: 0.92rem; color: var(--muted); }
 
-    /* 4 Pillars Grid */
+    /* Architecture grid */
     .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); border-top: 1px solid var(--line); border-left: 1px solid var(--line); background: var(--card); }
-    @media (max-width: 700px) { .grid-2 { grid-template-columns: 1fr; } }
-    .cell { padding: 1.7rem; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-    .cell-top { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; margin-bottom: 0.55rem; flex-wrap: wrap; }
-    .step-idx { font-family: var(--mono); color: var(--accent); font-size: 0.75rem; letter-spacing: 0.08em; }
-    .status-pill { font-family: var(--mono); font-size: 0.66rem; padding: 2px 7px; border: 1px solid var(--line); }
+    @media (max-width: 720px) { .grid-2 { grid-template-columns: 1fr; } }
+    .cell { padding: 1.75rem; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); display: flex; flex-direction: column; }
+    .cell-top { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; margin-bottom: 0.7rem; flex-wrap: wrap; }
+    .step-idx { font-family: var(--mono); color: var(--muted); font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; }
+    .status-pill { font-family: var(--mono); font-size: 0.66rem; padding: 2px 8px; border: 1px solid var(--line); white-space: nowrap; }
     .st-impl { border-color: var(--pine); color: var(--pine); background: #E9F3EE; }
     .st-sim { border-color: var(--amber); color: var(--amber); background: #FBF4E4; }
-    .cell h3 { font-family: var(--serif); font-weight: 600; font-size: 1.13rem; margin-bottom: 0.45rem; }
-    .cell p { font-size: 0.9rem; color: var(--muted); }
-    code { font-family: var(--mono); font-size: 0.84em; background: var(--paper-alt); padding: 0.1rem 0.3rem; border: 1px solid var(--line); color: var(--ink); }
+    .cell h3 { margin-bottom: 0.5rem; }
+    .cell p { font-size: 0.92rem; color: var(--muted); margin-bottom: 1rem; }
+    .cell .tech { margin-top: auto; padding-top: 0.85rem; border-top: 1px dashed var(--line); font-family: var(--mono); font-size: 0.72rem; line-height: 1.6; color: var(--muted); }
+    .cell .limit { font-size: 0.82rem; color: var(--amber); margin-bottom: 1rem; }
 
+    /* Comparison table */
     .table-scroll { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--line); background: var(--card); }
-    table { width: 100%; min-width: 600px; border-collapse: collapse; font-size: 0.88rem; }
-    th, td { text-align: left; padding: 0.78rem 0.9rem; border-bottom: 1px solid var(--line); }
+    table { width: 100%; min-width: 640px; border-collapse: collapse; font-size: 0.9rem; }
+    th, td { text-align: left; padding: 0.95rem 1.1rem; border-bottom: 1px solid var(--line); vertical-align: top; }
     tr:last-child td { border-bottom: none; }
-    th { font-family: var(--mono); font-size: 0.71rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); background: var(--paper-alt); font-weight: 500; }
-    td.mono { font-family: var(--mono); font-size: 0.8rem; }
+    th { font-family: var(--mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); background: var(--paper-alt); font-weight: 500; }
+    td small { display: block; color: var(--muted); font-size: 0.8rem; margin-top: 0.15rem; }
+    tr.ours td { background: #FFFDF8; box-shadow: inset 0 0 0 0 transparent; }
+    tr.ours td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 
-    .profiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); gap: 0.75rem; }
-    .profile-box { background: var(--card); border: 1px solid var(--line); padding: 1.1rem; }
-    .profile-tag { font-family: var(--mono); font-size: 0.74rem; color: var(--accent); margin-bottom: 0.25rem; display: block; }
-    .profile-box strong { display: block; font-family: var(--serif); font-weight: 600; margin-bottom: 0.25rem; }
-    .profile-box span { font-size: 0.82rem; color: var(--muted); }
+    /* Use cases (profiles) */
+    .usecases { display: grid; grid-template-columns: repeat(6, 1fr); gap: 1rem; }
+    .uc { grid-column: span 2; background: var(--card); border: 1px solid var(--line); padding: 1.5rem; display: flex; flex-direction: column; transition: border-color 0.15s ease; }
+    .uc:hover { border-color: var(--muted); }
+    .uc.wide { grid-column: span 3; }
+    @media (max-width: 900px) {
+      .uc, .uc.wide { grid-column: span 3; }
+      .uc:last-child { grid-column: span 6; }
+    }
+    @media (max-width: 600px) { .uc, .uc.wide, .uc:last-child { grid-column: span 6; } }
+    .uc-top { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; margin-bottom: 0.9rem; flex-wrap: wrap; }
+    .uc-tag { font-family: var(--mono); font-size: 0.72rem; font-weight: 600; letter-spacing: 0.06em; color: var(--accent); border: 1px solid var(--accent); padding: 1px 7px; }
+    .uc-kind { font-family: var(--mono); font-size: 0.66rem; color: var(--muted); }
+    .uc h3 { font-size: 1.22rem; margin-bottom: 0.45rem; }
+    .uc-scene { font-size: 0.93rem; margin-bottom: 1.15rem; }
+    .uc-facts { margin-top: auto; border-top: 1px solid var(--line); padding-top: 0.9rem; display: grid; gap: 0.7rem; }
+    .uc-facts dt { font-family: var(--mono); font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 0.1rem; }
+    .uc-facts dd { font-size: 0.86rem; line-height: 1.5; }
+    .uc-note { margin-top: 1.25rem; font-size: 0.84rem; color: var(--muted); }
 
-    .quickstart { background: var(--card); border: 1px solid var(--line); padding: 1.5rem; display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 1.5rem; align-items: center; }
-    @media (max-width: 760px) { .quickstart { grid-template-columns: 1fr; } }
-    pre.cmd { background: #151619; color: #ECEFF4; font-family: var(--mono); font-size: 0.78rem; padding: 1rem; overflow-x: auto; line-height: 1.6; }
-    .doc-links { display: flex; flex-direction: column; gap: 0.55rem; font-size: 0.9rem; }
-    .doc-links a { padding: 0.55rem 0.8rem; border: 1px solid var(--line); background: var(--paper); display: flex; justify-content: space-between; align-items: center; }
-    .doc-links a:hover { border-color: var(--ink); }
+    /* Quickstart */
+    .qs-steps { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin-bottom: 1rem; }
+    @media (max-width: 760px) { .qs-steps { grid-template-columns: minmax(0, 1fr); } }
+    .qs-step { background: var(--card); border: 1px solid var(--line); padding: 1.4rem; display: flex; flex-direction: column; min-width: 0; }
+    .qs-label { font-family: var(--mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--accent); margin-bottom: 0.4rem; }
+    .qs-step h3 { margin-bottom: 0.35rem; }
+    .qs-step p { font-size: 0.88rem; color: var(--muted); margin-bottom: 1rem; }
+    pre.cmd { margin-top: auto; background: #151619; color: #ECEFF4; font-family: var(--mono); font-size: 0.82rem; padding: 0.9rem 1rem; overflow-x: auto; line-height: 1.5; white-space: pre; }
+    pre.cmd .prompt { color: #F4B728; user-select: none; }
+    .doc-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; }
+    @media (max-width: 900px) { .doc-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 480px) { .doc-grid { grid-template-columns: minmax(0, 1fr); } }
+    .doc-card { background: var(--card); border: 1px solid var(--line); padding: 1.15rem 1.2rem; display: flex; flex-direction: column; gap: 0.3rem; transition: border-color 0.15s ease, transform 0.15s ease; }
+    .doc-card:hover { border-color: var(--ink); transform: translateY(-2px); }
+    .doc-card strong { font-family: var(--serif); font-size: 1.05rem; font-weight: 600; display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; }
+    .doc-card strong::after { content: "→"; color: var(--accent); font-family: var(--sans); }
+    .doc-card span { font-size: 0.84rem; color: var(--muted); line-height: 1.45; }
 
-    footer { padding: 2.25rem 0 3rem; font-size: 0.83rem; color: var(--muted); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 1rem; }
-    footer a { border-bottom: 1px solid var(--line); }
-    footer a:hover { color: var(--ink); border-color: var(--ink); }
+    /* Shared footer */
+    .site-footer { border-top: 1px solid var(--line); background: var(--card); }
+    .site-footer .inner { max-width: 1160px; margin: 0 auto; padding: 1.75rem 2rem 2.25rem; font-size: 0.83rem; color: var(--muted); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem 2rem; }
+    .site-footer a { border-bottom: 1px solid var(--line); }
+    .site-footer a:hover { color: var(--ink); border-color: var(--ink); }
+    @media (max-width: 720px) { .site-footer .inner { padding: 1.5rem 1rem 2rem; } }
   </style>
 </head>
 <body>
   <div class="proto-banner">
-    <strong>Research Prototype:</strong> Real <code>tachyon-zcash/ragu</code> recursive PCD &amp; Pallas ECDH crypto over a simulated in-memory ledger. Not audited — see <a href="/whitepaper">Whitepaper</a> &amp; <a href="/security">Security</a>.
+    <strong>Research prototype</strong> · real Ragu proofs over a simulated in-memory ledger · not audited · <a href="/security">what that means</a>
   </div>
 
-  <header>
-    <div class="wrap nav">
+  <header class="site-header">
+    <div class="site-nav">
       <a href="/" class="brand">
-        <img src="/logo.png" onerror="this.onerror=null;this.src='logo.png'" alt="Zyoza Dumpling Logo" />
+        <img src="/logo.png" onerror="this.onerror=null;this.src='logo.png'" alt="" />
         <span>Zyoza</span>
       </a>
       <nav class="nav-links" aria-label="Primary">
-        <a href="#how-it-works">How It Works</a>
-        <a href="#architecture">Architecture</a>
-        <a href="#comparison">Tradeoffs</a>
+        <a href="/" aria-current="page">Overview</a>
+        <a href="/demo">Studio</a>
         <a href="/whitepaper">Whitepaper</a>
         <a href="/spec">Spec</a>
-        <a href="/demo" class="nav-cta">Zyoza Studio →</a>
+        <a href="/security">Security</a>
+        <a href="https://github.com/zkzoeee/zyoza" rel="noopener" class="nav-ext">GitHub ↗</a>
       </nav>
     </div>
   </header>
@@ -179,159 +247,172 @@
   <main class="wrap">
     <section class="hero">
       <div>
-        <div class="kicker">Zcash · Ragu Recursive PCD · ZIP 227 / 302</div>
+        <div class="kicker">Proof-carrying objects on Zcash</div>
         <h1>Wrapped in secrecy.<br/>Folded in proof.</h1>
-        <p class="lead-plain">
-          Built for creators, collectors, and communities to mint, trade, and prove ownership of NFTs, event tickets, and credentials on Zcash—without exposing their wallet.
+        <p class="lead">
+          Mint, trade and prove ownership of collectibles, tickets and credentials on Zcash, without exposing your wallet.
         </p>
-        <p class="subtitle">
-          Encrypted media stays off-chain, transition rules fold recursively via <strong>tachyon-zcash/ragu</strong> into one constant-size <code>7,168 B</code> proof, and ZIP 227 asset digests prepare objects for native Zcash Shielded Assets.
+        <p class="sublead">
+          The media stays encrypted off-chain. Every change of hands adds one step to a proof that never grows, so a buyer can check an object's whole history in under a second.
         </p>
         <div class="btn-row">
-          <a href="/demo" class="btn btn-primary">Open Zyoza Studio</a>
-          <a href="/whitepaper" class="btn btn-ghost">Read Whitepaper</a>
-          <a href="/spec" class="btn btn-ghost">Protocol Spec</a>
+          <a href="/demo" class="btn btn-primary">Try it in Studio</a>
+          <a href="/whitepaper" class="btn btn-ghost">Read the whitepaper</a>
+          <a href="#how-it-works" class="text-link">How it works</a>
         </div>
       </div>
 
       <div class="specimen-card">
-        <svg id="nounz-svg" class="specimen-svg" viewBox="0 0 32 32" shape-rendering="crispEdges" role="img" aria-label="Interactive Nounz Specimen"></svg>
-        <div class="trait-label">Shades (Left-Hook Noggles)</div>
+        <svg id="nounz-svg" class="specimen-svg" viewBox="0 0 32 32" shape-rendering="crispEdges" role="img" aria-label="Interactive Nounz specimen"></svg>
+        <div class="trait-label">Shades</div>
         <div class="pill-row" id="shade-pills">
           <button type="button" class="pill active" onclick="setTrait('shades','venetian',this)">⌐≡-≡ Venetian</button>
           <button type="button" class="pill" onclick="setTrait('shades','mesh',this)">⌐▓-▓ Mesh</button>
-          <button type="button" class="pill" onclick="setTrait('shades','ovk',this)">⌐≡-◨ OVK Peek</button>
+          <button type="button" class="pill" onclick="setTrait('shades','noun',this)">⌐◨-◨ OG Noun</button>
         </div>
-        <div class="trait-label">Head Specimen</div>
+        <div class="trait-label">Head</div>
         <div class="pill-row" id="head-pills">
           <button type="button" class="pill active" onclick="setTrait('head','dumpling',this)">Dumpling</button>
           <button type="button" class="pill" onclick="setTrait('head','terminal',this)">CRT Terminal</button>
           <button type="button" class="pill" onclick="setTrait('head','hoodie',this)">Cypher Hood</button>
+          <button type="button" class="pill" onclick="setTrait('head','zakura',this)">Zakura</button>
+          <button type="button" class="pill" onclick="setTrait('head','zebra',this)">Zebra</button>
         </div>
         <div class="specimen-meta">
           <span id="spec-label">NOUNZ · DUMPLING · ⌐≡-≡</span>
-          <span>0xFF·ZYOZ 512B SEAL</span>
+          <span>512 B seal</span>
         </div>
       </div>
     </section>
 
-    <section class="metrics" aria-label="Measured Protocol Metrics">
+    <section class="metrics" aria-label="Measured prototype figures">
       <div class="metric">
-        <strong>7,168 B</strong>
-        <span>Constant Ragu CompressedProof&lt;Pasta&gt;</span>
+        <strong>7,168 bytes</strong>
+        <span>Proof size, however long the history</span>
       </div>
       <div class="metric">
-        <strong>~2.2–5.0 s</strong>
-        <span>Warm Ragu prove / fold (multicore)</span>
+        <strong>~0.4–0.6 s</strong>
+        <span>To verify a proof</span>
       </div>
       <div class="metric">
-        <strong>~0.38–0.60 s</strong>
-        <span>O(1) verify_compressed</span>
+        <strong>~2–5 s</strong>
+        <span>To prove one step on a laptop, warm</span>
       </div>
       <div class="metric">
-        <strong>512 B / 32 B</strong>
-        <span>ZIP 302 seal / ECDH DEK re-wrap</span>
+        <strong>512 bytes</strong>
+        <span>On-chain seal per object. Media never touches the chain</span>
       </div>
     </section>
 
     <section id="how-it-works" class="section">
       <div class="section-head">
-        <h2>How Zyoza Works in Three Steps</h2>
-        <span class="section-note">Plain-English Overview</span>
+        <span class="eyebrow">How it works</span>
+        <h2>Three moves, from mint to proof</h2>
+        <p>No smart contract and no public index. The chain holds a small seal, and the holder carries the rest.</p>
       </div>
       <div class="how-grid">
         <div class="how-card">
-          <span class="how-num">STEP 01 · SEAL &amp; MINT</span>
-          <h3>Encrypt Once, Anchor a 512-Byte Seal</h3>
-          <p>Artwork and metadata are encrypted off-chain so they never bloat Zcash. Only a compact 512-byte cryptographic seal and deterministic anti-duplicate tags are anchored to the ledger.</p>
+          <span class="how-num">1</span>
+          <h3>Seal it</h3>
+          <p>The artwork and its metadata are encrypted once and stored off-chain. Zcash receives only a 512-byte seal, plus tags that stop the same slot being minted twice.</p>
         </div>
         <div class="how-card">
-          <span class="how-num">STEP 02 · TRADE &amp; FOLD</span>
-          <h3>Pass a 32-Byte Key &amp; Fold the Proof</h3>
-          <p>When an item changes hands, the seller re-wraps only the 32-byte decryption key to the buyer's public key and folds one Ragu proof step—never re-uploading media.</p>
+          <span class="how-num">2</span>
+          <h3>Hand it over</h3>
+          <p>To transfer, the seller re-wraps a 32-byte key for the buyer and adds one step to the object's proof. The media is never re-uploaded, however large it is.</p>
         </div>
         <div class="how-card">
-          <span class="how-num">STEP 03 · PROVE OR UPGRADE</span>
-          <h3>Show One Item, Keep Your Wallet Dark</h3>
-          <p>Collectors reveal a single item to a gallery or ticket gate using a per-object viewing key + zero-knowledge Merkle proof, or burn the seal 1:1 into a native ZSA token.</p>
+          <span class="how-num">3</span>
+          <h3>Show only what you choose</h3>
+          <p>A per-object viewing key reveals one item to a gallery or a ticket gate. A zero-knowledge proof shows you own it. The rest of your wallet stays dark.</p>
         </div>
       </div>
     </section>
 
     <section id="architecture" class="section">
       <div class="section-head">
-        <h2>Four Architectural Folds</h2>
-        <span class="section-note">Explicit Circuit Bindings &amp; Current Prototype Limits</span>
+        <span class="eyebrow">Architecture</span>
+        <h2>Four folds, and where each one stands</h2>
+        <p>The cryptography runs for real. Settlement is simulated in memory until it is wired to a Zcash node.</p>
       </div>
       <div class="grid-2">
         <div class="cell">
           <div class="cell-top">
-            <span class="step-idx">01 · IDENTITY &amp; SCARCITY</span>
-            <span class="status-pill st-impl">Implemented (Stage I Indexed)</span>
+            <span class="step-idx">01 · Identity &amp; scarcity</span>
+            <span class="status-pill st-impl">Implemented</span>
           </div>
-          <h3>ZIP 227 AssetDigest &amp; Bound Range Proofs</h3>
-          <p>Derives 64-byte <code>BLAKE2b-512("ZSA-Asset-Digest")</code> + Pallas <code>AssetBase</code>. Ragu's <code>IssuanceCapCircuit</code> binds <code>1 &le; slot &le; cap</code> to <code>(collection_id, asset_id)</code>; global uniqueness relies on a public Stage I nullifier log until Stage II ZSA consensus.</p>
+          <h3>An identity Zcash already understands</h3>
+          <p>Every object gets a ZIP 227 asset identity at mint, so it can later become a native Zcash Shielded Asset without changing its ID. A range proof ties each slot to its collection's supply cap.</p>
+          <p class="limit">Until ZSA activates, global uniqueness relies on a public mint-nullifier log.</p>
+          <div class="tech">BLAKE2b-512 AssetDigest · Pallas AssetBase · IssuanceCapCircuit</div>
         </div>
         <div class="cell">
           <div class="cell-top">
-            <span class="step-idx">02 · OUT-OF-BAND WRAPPING</span>
-            <span class="status-pill st-impl">Implemented (PQ: Design Target)</span>
+            <span class="step-idx">02 · Out-of-band wrapping</span>
+            <span class="status-pill st-impl">Implemented</span>
           </div>
-          <h3>O(1) Pallas ECDH Key Handover</h3>
-          <p>Payloads encrypt once under <code>ChaCha20Poly1305</code>. Transfers re-wrap only the 32-byte DEK via fresh OS-random ephemeral Pallas ECDH + <code>HKDF-SHA256</code>. <em>(Hybrid ML-KEM-768 encapsulation is a future design target.)</em></p>
+          <h3>Move the key, not the file</h3>
+          <p>Payloads are encrypted once. A transfer re-wraps only the 32-byte data key for the next holder, so handing over a large artwork costs the same as a small one.</p>
+          <p class="limit">Post-quantum hybrid wrapping (ML-KEM-768) is a design target, not built.</p>
+          <div class="tech">ChaCha20-Poly1305 · ephemeral Pallas ECDH · HKDF-SHA256</div>
         </div>
         <div class="cell">
           <div class="cell-top">
-            <span class="step-idx">03 · RECURSIVE LINEAGE</span>
-            <span class="status-pill st-impl">Implemented (See Ragu Caveat)</span>
+            <span class="step-idx">03 · Recursive lineage</span>
+            <span class="status-pill st-impl">Implemented</span>
           </div>
-          <h3>Ragu Non-Uniform Recursive PCD</h3>
-          <p>Enforces owner-tag authorization, commitment contiguity, sticky <code>RoyaltyCircuit</code> routing + creator receipt preimages, and public ticket nullifiers in a 10-slot header. <em>(Terminal compressed proofs hide witnesses; uncompressed fold state is not yet unlinkable in upstream Ragu.)</em></p>
+          <h3>One proof for the whole history</h3>
+          <p>Mints, transfers, royalty steps, ticket check-ins and upgrades are separate small circuits that fold into one proof. A verifier checks the latest proof and never replays the past.</p>
+          <p class="limit">Passing a proof to the next owner is not yet unlinkable in upstream Ragu.</p>
+          <div class="tech">tachyon-zcash/ragu · 10 Step&lt;Pasta&gt; circuits · no trusted setup</div>
         </div>
         <div class="cell">
           <div class="cell-top">
-            <span class="step-idx">04 · SETTLEMENT ADAPTERS</span>
-            <span class="status-pill st-sim">Simulated In-Memory Ledger</span>
+            <span class="step-idx">04 · Settlement</span>
+            <span class="status-pill st-sim">Simulated ledger</span>
           </div>
-          <h3>Orchard Seal → ZSA → Tachyon</h3>
-          <p>Implements ZIP 302 <code>0xFF||"ZYOZ"</code> memo encoding, real <code>orchard</code> address derivation, owner-bound <code>MigrationCircuit</code> burn proofs, and <code>2-of-3</code> Pallas Schnorr signing over simulated Orchard, ZSA, and Tachyon ledgers.</p>
+          <h3>Orchard today, ZSA and Tachyon next</h3>
+          <p>Stage I anchors seals in Orchard memos. Stage II burns a seal into a native ZSA note, co-signed by a 2-of-3 committee. Stage III moves to Tachyon's 32-byte commitments.</p>
+          <p class="limit">All three ledgers run in memory. Not yet connected to zebrad or lightwalletd.</p>
+          <div class="tech">ZIP 302 memo codec · MigrationCircuit · threshold Schnorr</div>
         </div>
       </div>
     </section>
 
     <section id="comparison" class="section">
       <div class="section-head">
-        <h2>Verification &amp; Privacy Tradeoffs</h2>
-        <span class="section-note">Exact public statements in <a href="/whitepaper" style="border-bottom:1px solid var(--muted)">Whitepaper §5</a> &amp; <a href="/security" style="border-bottom:1px solid var(--muted)">Security</a></span>
+        <span class="eyebrow">Tradeoffs</span>
+        <h2>What you gain, and what it costs</h2>
+        <p>Zyoza trades a few seconds of proving for a history nobody has to replay. The exact statements each proof makes are in the <a href="/whitepaper">whitepaper</a> and <a href="/security">security notes</a>.</p>
       </div>
       <div class="table-scroll">
         <table>
           <thead>
             <tr>
-              <th>Design Paradigm</th>
-              <th>Third-Party &amp; Inter-Owner Privacy</th>
-              <th>Warm Proving Cost</th>
-              <th>Verifier Work (H Hops)</th>
+              <th>Approach</th>
+              <th>Who sees the history</th>
+              <th>Cost per transfer</th>
+              <th>Buyer's check</th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td><strong>Public Smart Contracts</strong> (ERC-721 / Metaplex)</td>
-              <td>None (entire owner &amp; bid graph public)</td>
-              <td>None</td>
-              <td class="mono">O(1) via public L1 state</td>
+              <td><strong>Public smart contracts</strong><small>ERC-721, Metaplex</small></td>
+              <td>Everyone. Owners and bids are public</td>
+              <td>A transaction fee</td>
+              <td>Instant, from public state</td>
             </tr>
             <tr>
-              <td><strong>Client-Side DAG Validation</strong> (RGB / Taproot Assets)</td>
-              <td>Hides from public, but buyers replay full DAG</td>
+              <td><strong>Client-side validation</strong><small>RGB, Taproot Assets</small></td>
+              <td>Hidden from the public. Each buyer replays every past transfer</td>
               <td>Signatures only</td>
-              <td class="mono">O(H) linear history scan</td>
+              <td>Grows with every hop</td>
             </tr>
-            <tr>
-              <td><strong>Zyoza + Ragu PCD</strong> (Prototype Today)</td>
-              <td><strong>Compressed proof hides witnesses from verifiers</strong> <em>(inter-owner uncompressed fold awaits Ragu ZK rerandomization)</em></td>
-              <td><strong>~2.2–5.0 s / hop</strong> (active Step&lt;Pasta&gt; only)</td>
-              <td class="mono"><strong>O(1) (7,168 B, ~0.38–0.60 s)</strong></td>
+            <tr class="ours">
+              <td><strong>Zyoza with Ragu</strong><small>this prototype</small></td>
+              <td>Verifiers see one proof and no witnesses<small>Owner-to-owner handoff is not yet unlinkable</small></td>
+              <td>About 2–5 s of proving</td>
+              <td>Constant: 7,168 bytes, about half a second</td>
             </tr>
           </tbody>
         </table>
@@ -340,67 +421,99 @@
 
     <section id="profiles" class="section">
       <div class="section-head">
+        <span class="eyebrow">Use cases</span>
         <h2>One Core, Five Composable Profiles</h2>
-        <span class="section-note">Shared Envelope, Viewing Key &amp; Proof Traits</span>
+        <p>A profile is a set of rules for one kind of object. All five share the same seal, viewing key and proof format, so one object can carry steps from several of them.</p>
       </div>
-      <div class="profiles">
-        <div class="profile-box">
-          <span class="profile-tag">NFT1</span>
-          <strong>Collectibles</strong>
-          <span>Encrypted art, sticky royalty-receipt gates, lockups &amp; Nounz drops.</span>
-        </div>
-        <div class="profile-box">
-          <span class="profile-tag">TKT1</span>
-          <strong>Ticketing</strong>
-          <span>Publicly exposed Poseidon check-in nullifiers blocking ticket replay.</span>
-        </div>
-        <div class="profile-box">
-          <span class="profile-tag">CRD1</span>
-          <strong>Credentials</strong>
-          <span>Soulbound attestations &amp; issuer revocation registries.</span>
-        </div>
-        <div class="profile-box">
-          <span class="profile-tag">GAM1</span>
-          <strong>Gaming (Lootz)</strong>
-          <span>Mutable XP, level-ups &amp; equipped cypherpunk gear.</span>
-        </div>
-        <div class="profile-box">
-          <span class="profile-tag">RWA1</span>
-          <strong>Real-World Deeds</strong>
-          <span>Notary &amp; CRD1-gated compliant transfers.</span>
-        </div>
+      <div class="usecases">
+        <article class="uc wide">
+          <div class="uc-top"><span class="uc-tag">NFT1</span><span class="uc-kind">Ragu step: RoyaltyCircuit</span></div>
+          <h3>Art &amp; collectibles</h3>
+          <p class="uc-scene">An artist drops 100 pieces. Collectors trade them with no public owner list, and show a single piece to a gallery when they choose to.</p>
+          <dl class="uc-facts">
+            <div><dt>Stays private</dt><dd>The artwork file, who holds it, and everything else in the holder's wallet.</dd></div>
+            <div><dt>Can be proven</dt><dd>The piece belongs to the collection, its slot is within the cap, and each sale carried a royalty receipt.</dd></div>
+          </dl>
+        </article>
+        <article class="uc wide">
+          <div class="uc-top"><span class="uc-tag">TKT1</span><span class="uc-kind">Ragu step: TicketCheckInCircuit</span></div>
+          <h3>Event tickets</h3>
+          <p class="uc-scene">A venue sells tickets that can be resold privately. At the door each ticket checks in once, and a copy of it cannot get in again.</p>
+          <dl class="uc-facts">
+            <div><dt>Stays private</dt><dd>Who bought the ticket, who they bought it from, and what else they hold.</dd></div>
+            <div><dt>Can be proven</dt><dd>The ticket is genuine for this event and has not been used. Check-in publishes a one-time nullifier.</dd></div>
+          </dl>
+        </article>
+        <article class="uc">
+          <div class="uc-top"><span class="uc-tag">CRD1</span><span class="uc-kind">Host-side rules</span></div>
+          <h3>Credentials</h3>
+          <p class="uc-scene">A university or a DAO issues a diploma or membership bound to one holder.</p>
+          <dl class="uc-facts">
+            <div><dt>Stays private</dt><dd>The holder's identity and their other credentials.</dd></div>
+            <div><dt>Can be proven</dt><dd>Who issued it and that it has not been revoked. It cannot be transferred.</dd></div>
+          </dl>
+        </article>
+        <article class="uc">
+          <div class="uc-top"><span class="uc-tag">GAM1</span><span class="uc-kind">Ragu step: UpgradeCircuit</span></div>
+          <h3>Game items</h3>
+          <p class="uc-scene">A blade gains XP and levels up as it is used. Each upgrade folds into the same proof as its trades.</p>
+          <dl class="uc-facts">
+            <div><dt>Stays private</dt><dd>The player's inventory and play history.</dd></div>
+            <div><dt>Can be proven</dt><dd>The item's current state follows from its recorded upgrades.</dd></div>
+          </dl>
+        </article>
+        <article class="uc">
+          <div class="uc-top"><span class="uc-tag">RWA1</span><span class="uc-kind">Host-side rules</span></div>
+          <h3>Real-world deeds</h3>
+          <p class="uc-scene">A property deed changes hands only between parties who hold a valid compliance credential.</p>
+          <dl class="uc-facts">
+            <div><dt>Stays private</dt><dd>The parties and the terms of the transfer.</dd></div>
+            <div><dt>Can be proven</dt><dd>The recipient holds a CRD1 credential and a notary attested the transfer.</dd></div>
+          </dl>
+        </article>
       </div>
+      <p class="uc-note">NFT1, TKT1 and GAM1 have their own step circuits today. CRD1 and RWA1 rules run as host-side checks and are candidates for circuits later.</p>
     </section>
 
-    <section id="quickstart" class="section" style="border-bottom: none;">
+    <section id="quickstart" class="section">
       <div class="section-head">
+        <span class="eyebrow">Get started</span>
         <h2>Quickstart &amp; Technical Documentation</h2>
-        <span class="section-note">Rust 1.97+ · Offline Reproducible Tests</span>
+        <p>Needs Rust 1.97 or newer. The first build compiles Ragu and takes a few minutes.</p>
       </div>
-      <div class="quickstart">
-        <pre class="cmd"># Verify ZIP 227/302 vectors, 10-circuit Ragu PCD/ZK suite &amp; Studio API
-cargo test --workspace --offline
-
-# Launch Zyoza Studio &amp; Markdown docs on http://127.0.0.1:8080
-cargo run -p zyoza-gallery-demo</pre>
-        <div class="doc-links">
-          <a href="/whitepaper"><span><strong>Whitepaper (v2.1)</strong> — Public Statements, Ragu Caveats &amp; Trust Model</span><span>→</span></a>
-          <a href="/spec"><span><strong>Protocol Spec</strong> — ZIP 227 Vectors &amp; 512B ZIP 302 Layout</span><span>→</span></a>
-          <a href="/security"><span><strong>Security &amp; Benchmarks</strong> — Warm vs Cold Timings &amp; Circuit Equations</span><span>→</span></a>
-          <a href="/demo"><span><strong>Zyoza Studio</strong> — Live 6-Step Interactive Workbench</span><span>→</span></a>
+      <div class="qs-steps">
+        <div class="qs-step">
+          <div class="qs-label">Step 1</div>
+          <h3>Run the test suite</h3>
+          <p>Checks the ZIP 227 and ZIP 302 vectors, all ten Ragu circuits and the Studio API.</p>
+          <pre class="cmd"><span class="prompt">$ </span>cargo test --workspace --offline</pre>
         </div>
+        <div class="qs-step">
+          <div class="qs-label">Step 2</div>
+          <h3>Start Studio locally</h3>
+          <p>Serves this site, the docs and the interactive workbench at <code>127.0.0.1:8080</code>.</p>
+          <pre class="cmd"><span class="prompt">$ </span>cargo run -p zyoza-gallery-demo</pre>
+        </div>
+      </div>
+      <div class="doc-grid">
+        <a href="/demo" class="doc-card"><strong>Studio</strong><span>Mint, transfer, fold and trade one object in six live steps.</span></a>
+        <a href="/whitepaper" class="doc-card"><strong>Whitepaper</strong><span>Design, enforcement model, trust assumptions and Ragu caveats.</span></a>
+        <a href="/spec" class="doc-card"><strong>Protocol spec</strong><span>Byte layouts, ZIP 227 vectors and the 512-byte memo format.</span></a>
+        <a href="/security" class="doc-card"><strong>Security &amp; benchmarks</strong><span>Threat model, circuit equations, warm and cold timings.</span></a>
       </div>
     </section>
   </main>
 
-  <footer class="wrap">
-    <div>Zyoza Protocol · Licensed under <code>MIT OR Apache-2.0</code> · Author: <code>zkzoeee</code></div>
-    <div>
-      <a href="/demo">Zyoza Studio</a> ·
-      <a href="/whitepaper">Whitepaper</a> ·
-      <a href="/spec">Spec</a> ·
-      <a href="/security">Security</a> ·
-      <a href="https://github.com/zkzoeee/zyoza" rel="noopener">GitHub</a>
+  <footer class="site-footer">
+    <div class="inner">
+      <div>Zyoza · research prototype by <code>zkzoeee</code> · MIT or Apache-2.0</div>
+      <div>
+        <a href="/demo">Studio</a> ·
+        <a href="/whitepaper">Whitepaper</a> ·
+        <a href="/spec">Spec</a> ·
+        <a href="/security">Security</a> ·
+        <a href="https://github.com/zkzoeee/zyoza" rel="noopener">GitHub</a>
+      </div>
     </div>
   </footer>
 
@@ -417,7 +530,7 @@ cargo run -p zyoza-gallery-demo</pre>
           <rect x="7" y="23" width="18" height="9" fill="#23262F"/>
           <rect x="9" y="25" width="14" height="2" fill="#F4B728"/>
           <rect x="9" y="28" width="14" height="1" fill="#C53D2F"/>
-          <rect x="11" y="22" width="10" height="2" fill="#E5DCCB"/>
+          <rect x="11" y="22" width="10" height="2" fill="#D9B382"/>
           <rect x="9" y="5" width="2" height="2" fill="#D9B382"/>
           <rect x="12" y="4" width="2" height="3" fill="#E6C79C"/>
           <rect x="15" y="4" width="2" height="3" fill="#D9B382"/>
@@ -425,7 +538,8 @@ cargo run -p zyoza-gallery-demo</pre>
           <rect x="21" y="5" width="2" height="2" fill="#D9B382"/>
           <rect x="7" y="7" width="18" height="14" fill="#F6EFE2"/>
           <rect x="6" y="10" width="20" height="9" fill="#F6EFE2"/>
-          <rect x="8" y="20" width="16" height="2" fill="#E5DAC6"/>
+          <rect x="8" y="20" width="16" height="2" fill="#F6EFE2"/>
+          <rect x="9" y="21" width="14" height="1" fill="#E6C79C"/>
           <rect x="11" y="6" width="1" height="2" fill="#CBBFA8"/>
           <rect x="14" y="6" width="1" height="2" fill="#CBBFA8"/>
           <rect x="17" y="6" width="1" height="2" fill="#CBBFA8"/>
@@ -441,6 +555,64 @@ cargo run -p zyoza-gallery-demo</pre>
           <rect x="8" y="7" width="16" height="12" fill="#132219"/>
           <rect x="10" y="18" width="4" height="1" fill="#22C55E"/>
           <rect x="19" y="20" width="2" height="1" fill="#C53D2F"/>
+        `;
+      } else if (head === 'zakura') {
+        headSvg = `
+          <rect x="7" y="23" width="18" height="9" fill="#2B2230"/>
+          <rect x="9" y="27" width="14" height="2" fill="#E0527A"/>
+          <rect x="15" y="23" width="2" height="4" fill="#F9D5DC"/>
+          <rect x="11" y="22" width="10" height="2" fill="#F3D9DC"/>
+          <rect x="6" y="5" width="4" height="3" fill="#F29DB2"/>
+          <rect x="6" y="4" width="1" height="1" fill="#F29DB2"/>
+          <rect x="9" y="4" width="1" height="1" fill="#F29DB2"/>
+          <rect x="10" y="4" width="4" height="4" fill="#F7B9C8"/>
+          <rect x="10" y="3" width="1" height="1" fill="#F7B9C8"/>
+          <rect x="13" y="3" width="1" height="1" fill="#F7B9C8"/>
+          <rect x="14" y="3" width="4" height="5" fill="#F29DB2"/>
+          <rect x="14" y="2" width="1" height="1" fill="#F29DB2"/>
+          <rect x="17" y="2" width="1" height="1" fill="#F29DB2"/>
+          <rect x="18" y="4" width="4" height="4" fill="#F7B9C8"/>
+          <rect x="18" y="3" width="1" height="1" fill="#F7B9C8"/>
+          <rect x="21" y="3" width="1" height="1" fill="#F7B9C8"/>
+          <rect x="22" y="5" width="4" height="3" fill="#F29DB2"/>
+          <rect x="22" y="4" width="1" height="1" fill="#F29DB2"/>
+          <rect x="25" y="4" width="1" height="1" fill="#F29DB2"/>
+          <rect x="7" y="7" width="18" height="14" fill="#FBDDE3"/>
+          <rect x="6" y="10" width="20" height="9" fill="#FBDDE3"/>
+          <rect x="8" y="20" width="16" height="2" fill="#F2C2CD"/>
+          <rect x="15" y="7" width="2" height="1" fill="#F4B728"/>
+          <rect x="7" y="18" width="2" height="1" fill="#F29DB2"/>
+          <rect x="23" y="18" width="2" height="1" fill="#F29DB2"/>
+          <rect x="14" y="19" width="4" height="1" fill="#A84A63"/>
+        `;
+      } else if (head === 'zebra') {
+        headSvg = `
+          <rect x="7" y="23" width="18" height="9" fill="#F4F1EA"/>
+          <rect x="7" y="25" width="18" height="1" fill="#171614"/>
+          <rect x="7" y="28" width="18" height="1" fill="#171614"/>
+          <rect x="7" y="31" width="18" height="1" fill="#171614"/>
+          <rect x="11" y="22" width="10" height="2" fill="#E3DFD5"/>
+          <rect x="8" y="3" width="3" height="5" fill="#171614"/>
+          <rect x="9" y="4" width="1" height="2" fill="#F29DB2"/>
+          <rect x="21" y="3" width="3" height="5" fill="#171614"/>
+          <rect x="22" y="4" width="1" height="2" fill="#F29DB2"/>
+          <rect x="14" y="2" width="4" height="6" fill="#171614"/>
+          <rect x="13" y="4" width="6" height="3" fill="#171614"/>
+          <rect x="7" y="7" width="18" height="14" fill="#FAF8F3"/>
+          <rect x="6" y="10" width="20" height="9" fill="#FAF8F3"/>
+          <rect x="9" y="8" width="3" height="1" fill="#171614"/>
+          <rect x="20" y="8" width="3" height="1" fill="#171614"/>
+          <rect x="14" y="7" width="4" height="2" fill="#171614"/>
+          <rect x="6" y="11" width="2" height="1" fill="#171614"/>
+          <rect x="6" y="14" width="2" height="1" fill="#171614"/>
+          <rect x="6" y="17" width="3" height="1" fill="#171614"/>
+          <rect x="24" y="11" width="2" height="1" fill="#171614"/>
+          <rect x="24" y="14" width="2" height="1" fill="#171614"/>
+          <rect x="23" y="17" width="3" height="1" fill="#171614"/>
+          <rect x="10" y="18" width="12" height="4" fill="#34322F"/>
+          <rect x="12" y="19" width="1" height="1" fill="#8F8B84"/>
+          <rect x="19" y="19" width="1" height="1" fill="#8F8B84"/>
+          <rect x="14" y="21" width="4" height="1" fill="#171614"/>
         `;
       } else {
         headSvg = `
@@ -469,7 +641,9 @@ cargo run -p zyoza-gallery-demo</pre>
         `;
       }
 
-      const frame = shades === 'mesh' ? '#22C55E' : (shades === 'ovk' ? '#C53D2F' : '#F4B728');
+      // Zakura and Zebra keep their own frame colour; other heads take it from the shade.
+      const frame = head === 'zakura' ? '#E0527A' : head === 'zebra' ? '#C53D2F'
+        : (shades === 'mesh' ? '#22C55E' : (shades === 'noun' ? '#C53D2F' : '#F4B728'));
       let lenses = '';
       if (shades === 'venetian') {
         lenses += `<rect x="10" y="11" width="5" height="5" fill="${frame}"/>`;
@@ -484,12 +658,11 @@ cargo run -p zyoza-gallery-demo</pre>
           for (let x = 18; x <= 22; x++) if ((x + y) % 2 === 0) lenses += `<rect x="${x}" y="${y}" width="1" height="1" fill="${frame}"/>`;
         }
       } else {
-        lenses += `<rect x="10" y="11" width="5" height="5" fill="${frame}"/>`;
-        for (const y of [11, 13, 15]) {
-          lenses += `<rect x="10" y="${y}" width="5" height="1" fill="#0E1015"/>`;
+        // OG Noun: half white, half black in both lenses.
+        for (const x of [10, 18]) {
+          lenses += `<rect x="${x}" y="11" width="2" height="5" fill="#FFFFFF"/>`;
+          lenses += `<rect x="${x + 2}" y="11" width="3" height="5" fill="#111111"/>`;
         }
-        lenses += `<rect x="18" y="11" width="2" height="5" fill="#FFFFFF"/>`;
-        lenses += `<rect x="20" y="11" width="3" height="5" fill="#111111"/>`;
       }
 
       const noggles = `
@@ -504,7 +677,7 @@ cargo run -p zyoza-gallery-demo</pre>
       `;
 
       document.getElementById('nounz-svg').innerHTML = `<rect width="32" height="32" fill="${bg}"/>${headSvg}${noggles}`;
-      const sym = { venetian: '⌐≡-≡', mesh: '⌐▓-▓', ovk: '⌐≡-◨' }[shades];
+      const sym = { venetian: '⌐≡-≡', mesh: '⌐▓-▓', noun: '⌐◨-◨' }[shades];
       document.getElementById('spec-label').textContent = `NOUNZ · ${head.toUpperCase()} · ${sym}`;
     }
 

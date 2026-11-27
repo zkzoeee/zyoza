@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="/logo.png" />
+  <title>{{TITLE}} — Zyoza</title>
+  <style>
+    :root {
+      --paper: #F7F4ED;
+      --paper-alt: #EFEBE1;
+      --card: #FBF9F4;
+      --ink: #171614;
+      --muted: #5C5852;
+      --line: #DDD7C9;
+      --accent: #C53D2F;
+      --pine: #215A3E;
+      --amber: #8A5A10;
+      --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+      --sans: -apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", sans-serif;
+      --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      --header-h: 60px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body { background: var(--paper); color: var(--ink); font-family: var(--sans); line-height: 1.7; -webkit-font-smoothing: antialiased; }
+    a { color: inherit; text-decoration: none; }
+    a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+    /* ── Shared site header (keep identical in index.html, demo.html, doc_template.html) ── */
+    .proto-banner {
+      background: var(--ink);
+      color: #E9E4D8;
+      padding: 0.45rem 1rem;
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      letter-spacing: 0.01em;
+      text-align: center;
+    }
+    .proto-banner strong { color: #F4B728; font-weight: 600; }
+    .proto-banner a { border-bottom: 1px solid rgba(233, 228, 216, 0.5); }
+    .site-header {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      background: rgba(251, 249, 244, 0.94);
+      -webkit-backdrop-filter: blur(8px);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--line);
+    }
+    .site-nav {
+      max-width: 1160px;
+      height: var(--header-h);
+      margin: 0 auto;
+      padding: 0 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1.5rem;
+    }
+    .brand { display: flex; align-items: center; gap: 0.6rem; font-family: var(--serif); font-size: 1.2rem; font-weight: 600; letter-spacing: 0.01em; color: var(--ink); flex-shrink: 0; }
+    .brand img { width: 34px; height: 34px; border-radius: 6px; object-fit: cover; border: 1px solid var(--line); }
+    .nav-links { display: flex; align-items: center; gap: 0.2rem; font-size: 0.88rem; min-width: 0; }
+    .nav-links a { padding: 0.35rem 0.7rem; color: var(--muted); border-bottom: 2px solid transparent; white-space: nowrap; }
+    .nav-links a:hover { color: var(--ink); }
+    .nav-links a[aria-current="page"] { color: var(--ink); font-weight: 600; border-bottom-color: var(--accent); }
+    .nav-links a.nav-ext { color: var(--muted); font-family: var(--mono); font-size: 0.78rem; }
+    @media (max-width: 720px) {
+      .site-nav { padding: 0 1rem; gap: 0.75rem; }
+      .brand span { display: none; }
+      .nav-links { overflow-x: auto; scrollbar-width: none; }
+      .nav-links::-webkit-scrollbar { display: none; }
+      .nav-links a { padding: 0.35rem 0.55rem; }
+    }
+    /* ── end shared header ── */
+
+    /* Document layout: sticky contents rail + reading column */
+    .doc-layout { max-width: 1160px; margin: 0 auto; padding: 3rem 2rem 4.5rem; display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 3.5rem; align-items: start; }
+    .toc { position: sticky; top: calc(var(--header-h) + 2rem); max-height: calc(100vh - var(--header-h) - 4rem); overflow-y: auto; font-size: 0.84rem; }
+    .toc-title { font-family: var(--mono); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted); margin-bottom: 0.75rem; }
+    .toc a { display: block; padding: 0.32rem 0 0.32rem 0.85rem; color: var(--muted); border-left: 2px solid var(--line); line-height: 1.4; }
+    .toc a:hover { color: var(--ink); }
+    .toc a.active { color: var(--ink); border-left-color: var(--accent); font-weight: 600; }
+    @media (max-width: 960px) {
+      .doc-layout { grid-template-columns: minmax(0, 1fr); padding: 2rem 1rem 3.5rem; gap: 0; }
+      .toc { display: none; }
+    }
+
+    article { max-width: 780px; min-width: 0; }
+    .doc-kicker { font-family: var(--mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.14em; color: var(--accent); margin-bottom: 0.8rem; }
+    article h1, article h2, article h3 { font-family: var(--serif); font-weight: 600; line-height: 1.22; }
+    article h1 { font-size: clamp(1.95rem, 3.6vw, 2.6rem); letter-spacing: -0.012em; margin-bottom: 1.1rem; }
+    article h2 { font-size: 1.5rem; margin-top: 3rem; margin-bottom: 0.9rem; padding-top: 1.75rem; border-top: 1px solid var(--line); scroll-margin-top: calc(var(--header-h) + 0.5rem); }
+    article h3 { font-size: 1.14rem; margin-top: 1.9rem; margin-bottom: 0.55rem; scroll-margin-top: calc(var(--header-h) + 1rem); }
+    article p { margin-bottom: 1rem; }
+    article h1 + p { color: var(--muted); font-size: 0.92rem; background: var(--card); border: 1px solid var(--line); padding: 0.9rem 1.1rem; }
+    article ul, article ol { margin: 0 0 1rem 1.35rem; }
+    article li { margin-bottom: 0.45rem; }
+    article li > ul, article li > ol { margin-top: 0.45rem; margin-bottom: 0.2rem; }
+    article a { color: var(--accent); border-bottom: 1px solid rgba(197, 61, 47, 0.3); }
+    article a:hover { border-bottom-color: var(--accent); }
+    article blockquote { margin: 1.25rem 0; padding: 0.85rem 1.1rem; background: var(--card); border-left: 3px solid var(--accent); color: var(--muted); }
+    article blockquote p:last-child { margin-bottom: 0; }
+    article hr { border: none; margin: 0; height: 0; }
+    code { font-family: var(--mono); font-size: 0.84em; background: var(--paper-alt); padding: 0.08rem 0.3rem; border: 1px solid var(--line); overflow-wrap: anywhere; }
+    pre { background: #151619; color: #ECEFF4; padding: 1rem 1.1rem; overflow-x: auto; margin: 1.1rem 0 1.4rem; font-size: 0.86rem; line-height: 1.55; }
+    pre code { background: none; border: none; padding: 0; color: inherit; overflow-wrap: normal; }
+    pre.math-block { background: var(--card); color: var(--ink); border: 1px solid var(--line); border-left: 3px solid var(--ink); }
+    .table-wrap { width: 100%; overflow-x: auto; margin: 1.1rem 0 1.5rem; border: 1px solid var(--line); background: var(--card); }
+    table { width: 100%; min-width: 640px; border-collapse: collapse; font-size: 0.88rem; line-height: 1.55; }
+    th, td { text-align: left; padding: 0.7rem 0.9rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+    tr:last-child td { border-bottom: none; }
+    td code, th code { overflow-wrap: normal; }
+    td:first-child { min-width: 11.5rem; }
+    th { background: var(--paper-alt); font-family: var(--mono); font-size: 0.7rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); white-space: nowrap; }
+
+    /* Other-documents footer */
+    .doc-next { margin-top: 3.5rem; padding-top: 1.75rem; border-top: 1px solid var(--line); display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.75rem; }
+    .doc-next a { color: var(--ink); background: var(--card); border: 1px solid var(--line); padding: 0.85rem 1rem; font-family: var(--serif); font-weight: 600; display: flex; justify-content: space-between; gap: 0.5rem; }
+    .doc-next a::after { content: "→"; color: var(--accent); font-family: var(--sans); }
+    .doc-next a:hover { border-color: var(--ink); }
+    .doc-next a[aria-current="page"] { display: none; }
+
+    /* Shared footer */
+    .site-footer { border-top: 1px solid var(--line); background: var(--card); }
+    .site-footer .inner { max-width: 1160px; margin: 0 auto; padding: 1.75rem 2rem 2.25rem; font-size: 0.83rem; color: var(--muted); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem 2rem; }
+    .site-footer a { border-bottom: 1px solid var(--line); }
+    .site-footer a:hover { color: var(--ink); border-color: var(--ink); }
+    @media (max-width: 720px) { .site-footer .inner { padding: 1.5rem 1rem 2rem; } }
+  </style>
+</head>
+<body>
+  <div class="proto-banner">
+    <strong>Research prototype</strong> · real Ragu proofs over a simulated in-memory ledger · not audited · <a href="/security">what that means</a>
+  </div>
+
+  <header class="site-header">
+    <div class="site-nav">
+      <a href="/" class="brand">
+        <img src="/logo.png" alt="" />
+        <span>Zyoza</span>
+      </a>
+      <nav class="nav-links" aria-label="Primary">
+        <a href="/">Overview</a>
+        <a href="/demo">Studio</a>
+        <a href="/whitepaper">Whitepaper</a>
+        <a href="/spec">Spec</a>
+        <a href="/security">Security</a>
+        <a href="https://github.com/zkzoeee/zyoza" rel="noopener" class="nav-ext">GitHub ↗</a>
+      </nav>
+    </div>
+  </header>
+
+  <div class="doc-layout">
+    <nav class="toc" id="toc" aria-label="On this page">
+      <div class="toc-title">On this page</div>
+    </nav>
+    <article>
+      <div class="doc-kicker">{{TITLE}}</div>
+      {{BODY}}
+      <nav class="doc-next" aria-label="More documentation">
+        <a href="/whitepaper">Whitepaper</a>
+        <a href="/spec">Protocol spec</a>
+        <a href="/security">Security &amp; benchmarks</a>
+        <a href="/demo">Try it in Studio</a>
+      </nav>
+    </article>
+  </div>
+
+  <footer class="site-footer">
+    <div class="inner">
+      <div>Zyoza · research prototype by <code>zkzoeee</code> · MIT or Apache-2.0</div>
+      <div>
+        <a href="/demo">Studio</a> ·
+        <a href="/whitepaper">Whitepaper</a> ·
+        <a href="/spec">Spec</a> ·
+        <a href="/security">Security</a> ·
+        <a href="https://github.com/zkzoeee/zyoza" rel="noopener">GitHub</a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // Mark the current page in the header and the "more documentation" row.
+    document.querySelectorAll('.nav-links a, .doc-next a').forEach(a => {
+      if (a.getAttribute('href') === location.pathname) a.setAttribute('aria-current', 'page');
+    });
+
+    // Build the contents rail from the document's h2 headings.
+    const toc = document.getElementById('toc');
+    const heads = Array.from(document.querySelectorAll('article h2'));
+    const links = heads.map((h, i) => {
+      h.id = h.id || 'sec-' + (i + 1);
+      const a = document.createElement('a');
+      a.href = '#' + h.id;
+      a.textContent = h.textContent;
+      toc.appendChild(a);
+      return a;
+    });
+    if (!heads.length) toc.style.display = 'none';
+
+    function markActive() {
+      let cur = -1;
+      heads.forEach((h, i) => { if (h.getBoundingClientRect().top < 120) cur = i; });
+      links.forEach((a, i) => a.classList.toggle('active', i === cur));
+    }
+    document.addEventListener('scroll', markActive, { passive: true });
+    markActive();
+  </script>
+</body>
+</html>

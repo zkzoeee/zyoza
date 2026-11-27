@@ -1,0 +1,74 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1600px; height: 900px; overflow: hidden; }
+  body {
+    background: #F7F4ED; color: #171614;
+    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    display: grid; grid-template-columns: 1fr 520px; gap: 80px;
+    padding: 76px 96px 72px; position: relative;
+  }
+  body::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 14px; background: #C53D2F; }
+  .left { display: flex; flex-direction: column; }
+  .brand { display: flex; align-items: center; gap: 18px; font-family: "Iowan Old Style", Palatino, Georgia, serif; font-size: 40px; font-weight: 600; }
+  .brand img { width: 62px; height: 62px; border-radius: 10px; border: 1px solid #DDD7C9; }
+  .kicker { margin-top: auto; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 22px; letter-spacing: 0.16em; text-transform: uppercase; color: #C53D2F; margin-bottom: 26px; }
+  h1 { font-family: "Iowan Old Style", Palatino, Georgia, serif; font-weight: 600; font-size: 86px; line-height: 1.08; white-space: nowrap; letter-spacing: -0.02em; margin-bottom: 34px; }
+  .lead { font-size: 33px; line-height: 1.4; color: #3B3833; max-width: 20.5em; }
+  .tags { margin-top: auto; display: flex; gap: 14px; flex-wrap: wrap; }
+  .tag { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 21px; padding: 9px 18px; border: 1.5px solid #171614; background: #FBF9F4; }
+  .right { display: flex; flex-direction: column; justify-content: center; }
+  .card { background: #FBF9F4; border: 1.5px solid #DDD7C9; padding: 34px; box-shadow: 14px 14px 0 #EFEBE1; }
+  .card svg { width: 100%; height: auto; display: block; border: 1.5px solid #DDD7C9; }
+  .meta { margin-top: 24px; padding-top: 20px; border-top: 1.5px solid #DDD7C9; display: flex; justify-content: space-between; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 19px; color: #5C5852; }
+  .foot { margin-top: 30px; text-align: center; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 18px; color: #5C5852; letter-spacing: 0.04em; }
+</style></head>
+<body>
+  <div class="left">
+    <div class="brand"><img src="../../apps/gallery-demo/src/logo.png" alt=""><span>Zyoza</span></div>
+    <div class="kicker">Proof-carrying objects on Zcash</div>
+    <h1>Wrapped in secrecy.<br>Folded in proof.</h1>
+    <p class="lead">Mint, trade and prove ownership without exposing your wallet.</p>
+    <div class="tags">
+      <span class="tag">Collectibles</span><span class="tag">Tickets</span><span class="tag">Credentials</span><span class="tag">Game items</span>
+    </div>
+  </div>
+  <div class="right">
+    <div class="card">
+      <svg viewBox="0 0 32 32" shape-rendering="crispEdges">
+        <rect width="32" height="32" fill="#DDD6C7"/>
+        <rect x="7" y="23" width="18" height="9" fill="#23262F"/>
+        <rect x="9" y="25" width="14" height="2" fill="#F4B728"/>
+        <rect x="9" y="28" width="14" height="1" fill="#C53D2F"/>
+        <rect x="11" y="22" width="10" height="2" fill="#E5DCCB"/>
+        <rect x="9" y="5" width="2" height="2" fill="#D9B382"/>
+        <rect x="12" y="4" width="2" height="3" fill="#E6C79C"/>
+        <rect x="15" y="4" width="2" height="3" fill="#D9B382"/>
+        <rect x="18" y="4" width="2" height="3" fill="#E6C79C"/>
+        <rect x="21" y="5" width="2" height="2" fill="#D9B382"/>
+        <rect x="7" y="7" width="18" height="14" fill="#F6EFE2"/>
+        <rect x="6" y="10" width="20" height="9" fill="#F6EFE2"/>
+        <rect x="8" y="20" width="16" height="2" fill="#E5DAC6"/>
+        <rect x="11" y="6" width="1" height="2" fill="#CBBFA8"/>
+        <rect x="14" y="6" width="1" height="2" fill="#CBBFA8"/>
+        <rect x="17" y="6" width="1" height="2" fill="#CBBFA8"/>
+        <rect x="20" y="6" width="1" height="2" fill="#CBBFA8"/>
+        <rect x="14" y="19" width="4" height="1" fill="#5C5346"/>
+        <rect x="5" y="12" width="4" height="1" fill="#F4B728"/>
+        <rect x="5" y="13" width="1" height="3" fill="#F4B728"/>
+        <rect x="16" y="12" width="1" height="1" fill="#F4B728"/>
+        <rect x="9" y="10" width="7" height="7" fill="#F4B728"/>
+        <rect x="17" y="10" width="7" height="7" fill="#F4B728"/>
+        <rect x="10" y="11" width="5" height="5" fill="#F4B728"/>
+        <rect x="18" y="11" width="5" height="5" fill="#F4B728"/>
+        <rect x="10" y="11" width="5" height="1" fill="#0E1015"/><rect x="18" y="11" width="5" height="1" fill="#0E1015"/>
+        <rect x="10" y="13" width="5" height="1" fill="#0E1015"/><rect x="18" y="13" width="5" height="1" fill="#0E1015"/>
+        <rect x="10" y="15" width="5" height="1" fill="#0E1015"/><rect x="18" y="15" width="5" height="1" fill="#0E1015"/>
+      </svg>
+      <div class="meta"><span>NOUNZ · DUMPLING · ⌐≡-≡</span><span>512 B seal</span></div>
+    </div>
+    <div class="foot">Research prototype · built on Ragu</div>
+  </div>
+</body></html>

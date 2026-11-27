@@ -174,70 +174,11 @@ fn render_markdown_doc(title: &str, md: &str) -> Html<String> {
         }
     }
 
-    Html(format!(
-        r#"<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="icon" href="/logo.png" />
-  <title>{title} — Zyoza</title>
-  <style>
-    :root {{
-      --paper: #F7F4ED; --paper-alt: #EFEBE1; --card: #FAF8F3;
-      --ink: #171614; --muted: #5C5852; --line: #DDD7C9; --accent: #C53D2F;
-      --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
-      --sans: -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
-      --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-    }}
-    * {{ box-sizing: border-box; }}
-    body {{ margin: 0; background: var(--paper); color: var(--ink); font-family: var(--sans); line-height: 1.72; }}
-    a {{ color: var(--accent); text-decoration: none; }}
-    a:hover {{ text-decoration: underline; }}
-    a:focus-visible {{ outline: 2px solid var(--accent); outline-offset: 2px; }}
-    header {{ border-bottom: 1px solid var(--line); background: var(--card); padding: 1rem 1.5rem; position: sticky; top: 0; }}
-    .nav {{ max-width: 860px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; }}
-    .brand {{ display: flex; align-items: center; gap: 0.6rem; font-family: var(--serif); font-size: 1.15rem; font-weight: 600; color: var(--ink); }}
-    .brand img {{ width: 32px; height: 32px; border-radius: 6px; border: 1px solid var(--line); }}
-    .links {{ display: flex; gap: 1.15rem; font-size: 0.88rem; flex-wrap: wrap; }}
-    article {{ max-width: 860px; margin: 0 auto; padding: 2.75rem 1.5rem 4.5rem; }}
-    h1, h2, h3 {{ font-family: var(--serif); font-weight: 600; line-height: 1.25; }}
-    h1 {{ font-size: clamp(1.85rem, 3.5vw, 2.5rem); margin-bottom: 0.75rem; }}
-    h2 {{ font-size: 1.4rem; margin-top: 2.4rem; padding-top: 1.4rem; border-top: 1px solid var(--line); }}
-    h3 {{ font-size: 1.1rem; margin-top: 1.4rem; }}
-    blockquote {{ margin: 1rem 0; padding: 0.75rem 1rem; background: var(--card); border-left: 3px solid var(--accent); color: var(--muted); }}
-    hr {{ border: none; border-top: 1px solid var(--line); margin: 1.75rem 0; }}
-    code {{ font-family: var(--mono); font-size: 0.84em; background: var(--paper-alt); padding: 0.1rem 0.32rem; border: 1px solid var(--line); }}
-    pre {{ background: var(--card); border: 1px solid var(--line); padding: 1rem; overflow-x: auto; }}
-    pre code {{ background: none; border: none; padding: 0; }}
-    .math-block {{ background: #F2EEE4; border-left: 3px solid var(--ink); }}
-    .table-wrap {{ width: 100%; overflow-x: auto; margin: 1rem 0 1.4rem; border: 1px solid var(--line); background: var(--card); }}
-    table {{ width: 100%; min-width: 540px; border-collapse: collapse; font-size: 0.88rem; }}
-    th, td {{ text-align: left; padding: 0.65rem 0.8rem; border-bottom: 1px solid var(--line); }}
-    tr:last-child td {{ border-bottom: none; }}
-    th {{ background: var(--paper-alt); font-family: var(--mono); font-size: 0.74rem; text-transform: uppercase; color: var(--muted); }}
-  </style>
-</head>"#,
-        title = escape_html(title)
-    ) + &format!(
-        r#"
-<body>
-  <header>
-    <div class="nav">
-      <a href="/" class="brand"><img src="/logo.png" alt="Zyoza" /><span>Zyoza</span></a>
-      <nav class="links">
-        <a href="/">Overview</a>
-        <a href="/whitepaper">Whitepaper</a>
-        <a href="/spec">Protocol Spec</a>
-        <a href="/security">Security &amp; Benchmarks</a>
-        <a href="/demo"><strong>Zyoza Studio →</strong></a>
-      </nav>
-    </div>
-  </header>
-  <article>{body_html}</article>
-</body>
-</html>"#
-    ))
+    Html(
+        include_str!("doc_template.html")
+            .replace("{{TITLE}}", &escape_html(title))
+            .replace("{{BODY}}", &body_html),
+    )
 }
 
 async fn whitepaper_page() -> Html<String> {

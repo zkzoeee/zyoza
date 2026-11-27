@@ -1,8 +1,30 @@
-# Zyoza — Proof-Carrying Shielded State Objects on Zcash
+# Zyoza — Proof-Carrying Objects on Zcash
 
-> **Status:** Research prototype — 100% unified `tachyon-zcash/ragu` non-uniform recursive PCD & zero-knowledge circuits (10 registered `Step<Pasta>` subcircuits), Pallas ECDH + ChaCha20-Poly1305 out-of-band wrapping, ZIP 227 `AssetDigest`/`AssetBase`, ZIP 302 binary memo seals, and salted commit-reveal auctions executing over a simulated in-memory settlement ledger. Not audited.
+**Wrapped in secrecy. Folded in proof.**
 
-**Zyoza** lets creators and collectors mint, transfer, selectively disclose, and trade private NFTs, event tickets, credentials, game items, and deeds on Zcash without leaking ownership history or bloating L1 state.
+Zyoza lets you mint, trade and prove ownership of collectibles, tickets, credentials, game items and deeds on Zcash, without exposing your wallet. The media stays encrypted off-chain, the chain holds a 512-byte seal, and every change of hands adds one step to a recursive proof that stays 7,168 bytes however long the history gets.
+
+**Live demo:** <https://zyoza.fly.dev> — landing page, the six-step [Zyoza Studio](https://zyoza.fly.dev/demo), and the rendered [whitepaper](https://zyoza.fly.dev/whitepaper).
+
+> **Status: research prototype, not audited.** The proofs are real: every circuit runs on [`tachyon-zcash/ragu`](https://github.com/tachyon-zcash/ragu), which is itself unaudited. Settlement is a simulated in-memory ledger, not yet wired to a Zcash node. Handing an uncompressed proof to the next owner is not yet unlinkable in upstream Ragu. See [Security & Benchmarks](docs/SECURITY_AND_BENCHMARKS.md).
+
+## How it works
+
+1. **Seal it.** State and media are encrypted once (`ChaCha20-Poly1305`) and stored off-chain. Zcash gets a 512-byte ZIP 302 memo seal plus mint nullifiers that stop a slot being minted twice.
+2. **Hand it over.** A transfer re-wraps only the 32-byte data key for the buyer (ephemeral Pallas ECDH) and folds one step into the object's Ragu proof.
+3. **Show only what you choose.** A per-object viewing key discloses one item, and a zero-knowledge Merkle proof shows ownership, without revealing the rest of the wallet.
+
+Each object carries a ZIP 227 `AssetDigest` / `AssetBase` from mint, so a Stage I seal can later be burned 1:1 into a native Zcash Shielded Asset (Stage II) and move to Tachyon commitments (Stage III).
+
+## Profiles
+
+| Profile | Use case | Rules today |
+| :--- | :--- | :--- |
+| `NFT1` | Art and collectibles: trade with no public owner list, royalty receipts | Ragu `RoyaltyCircuit` |
+| `TKT1` | Event tickets: resell privately, check in once | Ragu `TicketCheckInCircuit` |
+| `GAM1` | Game items: upgrades fold into the same proof as trades | Ragu `UpgradeCircuit` |
+| `CRD1` | Credentials: bound to one holder, revocable | Host-side checks |
+| `RWA1` | Real-world deeds: transfers gated by a compliance credential | Host-side checks |
 
 ## Workspace Layout (13 Crates)
 
@@ -10,7 +32,7 @@
 | :--- | :--- | :--- |
 | `zyoza-core` | Implemented | ZIP 227 `AssetDigest`/`AssetId`/`AssetBase`, 512B ZIP 302 `OrchardMemoSeal` (`0xFF\|\|"ZYOZ"`), `CollectionSpec`, `ObjectViewingKey`, core traits |
 | `zyoza-oob` | Implemented | `ChaCha20Poly1305` + ephemeral Pallas ECDH (`HKDF-SHA256`) 32B DEK re-wrapping, `OobStorage`, seed-encrypted backups |
-| `zyoza-proofs` | Implemented | Pure `tachyon-zcash/ragu` (`Application<Pasta, WalletRank, 5>`) with 10 registered `Step<Pasta>` circuits: recursive PCD (`Mint`, `Transfer`, `Royalty`, `TicketCheckIn`, `Upgrade`), `OwnershipMerkleCircuit`, 16-bit `IssuanceCapCircuit`, `AttributeCircuit`, and `MigrationCircuit` |
+| `zyoza-proofs` | Implemented | Pure `tachyon-zcash/ragu` (one `Application` over Pasta at `WalletRank`, 10-slot lineage header) with 10 registered `Step<Pasta>` circuits: recursive PCD (`Mint`, `Transfer`, `Royalty`, `TicketCheckIn`, `Upgrade`), `OwnershipMerkleCircuit`, 16-bit `IssuanceCapCircuit`, `AttributeCircuit`, and `MigrationCircuit` |
 | `zyoza-settlement` | Simulated Ledger | Real `orchard` key/address derivation, 2-of-3 Pallas threshold Schnorr signing (trusted-dealer setup), plus in-memory `OrchardSealAdapter`, `OrchardZsaAdapter`, and `TachyonAdapter` |
 | `zyoza-profile-nft` | Implemented | `NFT1` collectibles (encrypted media manifest, royalties, time lockups, provenance) |
 | `zyoza-profile-ticket` | Implemented | `TKT1` ticketing (one-time Poseidon/BLAKE2b check-in nullifiers, replay rejection) |
@@ -20,24 +42,44 @@
 | `zyoza-sdk` | Implemented | High-level `ZyozaNftClient` + portable JSON/byte-slice FFI layer |
 | `zyoza-wasm` | Implemented | `wasm-bindgen` browser verification & preview bindings |
 | `zyoza-cli` | Implemented | CLI for `init`, `nft mint`, `nft transfer`, `nft inspect`, `prove-ownership`, `verify-proof`, `ticket` |
-| `apps/gallery-demo` | Implemented | Axum web server (`/`, `/demo` Zyoza Studio, Markdown-rendered `/whitepaper`, `/spec`, `/security`, and commit-reveal auction API) |
+| `apps/gallery-demo` | Implemented | Axum web server: landing page (`/`), Zyoza Studio (`/demo`), Markdown-rendered `/whitepaper`, `/spec`, `/security`, and the commit-reveal auction API. Pages are compiled into the binary |
 
 ## Quickstart
 
-Requires Rust `1.97+` (`rustc 1.99+` tested).
+Requires Rust `1.97+` (`rustc 1.99` tested). The first build compiles Ragu and takes a few minutes.
 
 ```bash
-# Run full workspace test suite (ZIP 227/302 vectors, 10-circuit Ragu PCD/ZK suite, Tachyon 10k drop, Studio HTTP API)
+# Run the full workspace test suite (ZIP 227/302 vectors, all ten Ragu circuits, Studio HTTP API)
 cargo test --workspace --offline
-
-# Launch Landing Page + Zyoza Studio + Whitepaper (defaults to http://127.0.0.1:8080; override via ZYOZA_LISTEN)
-ZYOZA_LISTEN=127.0.0.1:8080 cargo run -p zyoza-gallery-demo
 ```
+
+```bash
+# Serve the landing page, Studio and docs at http://127.0.0.1:8080 (override with ZYOZA_LISTEN)
+cargo run --release -p zyoza-gallery-demo
+```
+
+The HTML pages and docs are embedded at compile time, so rebuild and restart the server after editing anything under `apps/gallery-demo/src/*.html` or `docs/*.md`.
+
+## Deployment (Fly.io)
+
+The repo ships a `Dockerfile` and `fly.toml` for the gallery server. It runs as a single machine with no HA:
+
+```bash
+fly deploy --ha=false
+```
+
+* **Machine:** `shared-cpu-2x` with 1 GB RAM. The Ragu prover peaks near 360 MB, so 512 MB is too tight. On this size a fold takes about 5 s (about 2 s on an M-series laptop).
+* **Idle behaviour:** the machine stops when idle and wakes on the next request. Studio state is in memory and shared by all visitors, so a stop or anyone's "Reset session" clears it.
+* **First deploy of a new app:** allocate addresses once with `fly ips allocate-v4 --shared` and `fly ips allocate-v6`.
+* **Lockfile:** the Docker build uses `cargo build --locked`, so `Cargo.lock` must be present in the build context (it is currently git-ignored).
 
 ## Documentation
 * [Whitepaper (`docs/WHITEPAPER.md`)](docs/WHITEPAPER.md) — served live as HTML at `/whitepaper`
 * [Protocol Specification (`docs/SPEC.md`)](docs/SPEC.md) — served live as HTML at `/spec`
 * [Security Model, Constraints & Benchmarks (`docs/SECURITY_AND_BENCHMARKS.md`)](docs/SECURITY_AND_BENCHMARKS.md) — served live as HTML at `/security`
+
+## Social assets
+`docs/social/` holds launch images and the script that generates the pixel-art scene (`gyoza-party.py`).
 
 ## License
 Licensed under either of **MIT** or **Apache-2.0** at your option.
