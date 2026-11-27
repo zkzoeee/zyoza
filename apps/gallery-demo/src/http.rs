@@ -62,18 +62,8 @@ async fn demo_page() -> Html<&'static str> {
     Html(include_str!("demo.html"))
 }
 
-async fn whitepaper_page() -> Html<String> {
-    let md = include_str!("../../../docs/WHITEPAPER.md");
-    let escaped = md
-        .replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;");
-    Html(format!(
-        r#"<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Zyoza Whitepaper</title>
-        <style>body{{background:#F7F4ED;color:#171614;font-family:"Hiragino Mincho ProN",Georgia,serif;max-width:820px;margin:2.5rem auto;padding:0 1.5rem;line-height:1.7}}
-        a{{color:#C53D2F;text-decoration:none;font-family:sans-serif;font-size:0.9rem}} pre{{white-space:pre-wrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:0.86rem;background:#FAF8F3;border:1px solid #DDD7C9;padding:1.75rem}}</style></head>
-        <body><p><a href="/">← Landing Page</a> &nbsp;·&nbsp; <a href="/demo">Interactive Demo →</a></p><pre>{escaped}</pre></body></html>"#
-    ))
+async fn whitepaper_page() -> Html<&'static str> {
+    Html(include_str!("whitepaper.html"))
 }
 
 async fn list_listings(State(state): State<CombinedState>) -> Json<Vec<GalleryListing>> {
