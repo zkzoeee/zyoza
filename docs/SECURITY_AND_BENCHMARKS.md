@@ -2,16 +2,15 @@
 
 ## 1. Measured Reference Benchmarks
 
-All measurements below were collected directly from `cargo test --workspace --offline -- --nocapture` on **Apple M2 Pro** (`macOS`, `rustc 1.99.1 (58cf8f9c3 2026-10-13)`, Cargo profile `opt-level = 2`, single-threaded Ragu `baked` backend without `multicore`):
+All measurements below were collected directly from `cargo test -p zyoza-proofs --offline -- --test-threads=1 --nocapture` on **Apple M2 Pro** (`macOS`, `rustc 1.99.1 (58cf8f9c3 2026-10-13)`, Cargo profile `opt-level = 2`, Ragu `baked` + target-gated `multicore` Rayon acceleration):
 
 | Operation | Engine / Parameters | Prove / Execute | Verify | Artifact Size |
 | :--- | :--- | :--- | :--- | :--- |
-| **Ragu Recursive PCD Fold (`fuse` + `compress`)** | `tachyon-zcash/ragu` (`WalletRank = R<13>`, Pasta) | `7,409 ms / hop` | `732 ms` ($O(1)$) | **`7,168 B`** (`CompressedProof<Pasta>`) |
-| **Ragu Poseidon-Merkle Ownership Proof** | `OwnershipMerkleCircuit` (`MERKLE_DEPTH = 4`, Pasta) | `14,447 ms` *(incl. table init)* | `466 ms` | **`7,168 B`** (`CompressedProof<Pasta>`) |
-| **Ragu Supply-Cap / Trait / Migration Proof** | `IssuanceCapCircuit` / `AttributeCircuit` / `MigrationCircuit` (`WalletRank`) | `~7.0 s` *(warm thread)* | `~460 ms` | **`7,168 B`** (`CompressedProof<Pasta>`) |
+| **Ragu Recursive PCD Fold (`fuse` + `compress`)** | `tachyon-zcash/ragu` (`WalletRank = R<13>`, `multicore`) | **`2,153 ms / hop`** *(1-thread: `7,409 ms`)* | **`371 ms`** ($O(1)$) | **`7,168 B`** (`CompressedProof<Pasta>`) |
+| **Ragu Standalone Proof (`seed` + `compress`)** | `Mint` / `OwnershipMerkle` / `Cap` / `Trait` / `Migration` | **`2,026 ms`** *(warm; cold init `+4,821 ms`)* | **`371 ms`** | **`7,168 B`** (`CompressedProof<Pasta>`) |
 | **Tachyon 10,000-Mint Epoch Aggregation** | `TachyonAdapter` (simulated 14-level Merkle epoch) | `< 50 ms` | `< 1 ms` (14 hashes) | `32 B` `Tachystamp` root |
 
-*Note on first-call initialization:* `ragu::Application` initializes its baked Pasta synthesis tables per worker thread on first touch (`~7 s` on Apple M2 Pro); subsequent `fuse` + `compress` folds on warm threads run in `~7.4 s` and always compress to **`7,168 bytes`** (`CompressedProof::<Pasta>::encoded_len::<WalletRank>()`).
+*Note on target-gated `multicore` & thread warm-up:* `crates/zyoza-proofs/Cargo.toml` enables Ragu's `multicore` (`rayon`) feature automatically on native targets (`macOS`, `Linux`, `iOS`, `Android` — cutting prove/fold latency by **~3.5x**, from `7.41 s` to `2.15 s`), while keeping `wasm32` single-threaded by default. Each worker thread initializes its baked Pasta synthesis tables once (`4.82 s` on Apple M2 Pro) and reuses them for all subsequent proofs.
 
 ---
 

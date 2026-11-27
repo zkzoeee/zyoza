@@ -1537,6 +1537,11 @@ mod tests {
         let engine = RaguPcdEngine;
         let asset_id = AssetId::derive(&[0x01; 32], b"zyoza:ragu:real:1");
 
+        let t_init = std::time::Instant::now();
+        with_ragu(|_| {});
+        let init_ms = t_init.elapsed().as_millis();
+
+        let t_seed = std::time::Instant::now();
         let pcd1 = engine
             .fold_step(
                 None,
@@ -1551,6 +1556,7 @@ mod tests {
                 },
             )
             .unwrap();
+        let seed_ms = t_seed.elapsed().as_millis();
         assert!(engine.verify_pcd(&pcd1).unwrap());
         let len_1 = pcd1.compressed_proof.len();
         assert_eq!(len_1, compressed_proof_len());
@@ -1636,6 +1642,7 @@ mod tests {
                 },
             )
             .unwrap();
+        let t_fold = std::time::Instant::now();
         let pcd4 = engine
             .fold_step(
                 Some(&pcd3),
@@ -1650,8 +1657,15 @@ mod tests {
                 },
             )
             .unwrap();
+        let fold_ms = t_fold.elapsed().as_millis();
 
+        let t_ver = std::time::Instant::now();
         assert!(engine.verify_pcd(&pcd4).unwrap());
+        let ver_ms = t_ver.elapsed().as_millis();
+        println!(
+            "[Ragu Multicore Benchmark] proof={}B init={}ms warm_seed={}ms warm_fold={}ms verify={}ms",
+            len_1, init_ms, seed_ms, fold_ms, ver_ms
+        );
         assert_eq!(pcd4.step_count, 4);
         assert_eq!(pcd4.compressed_proof.len(), len_1);
 
