@@ -1,7 +1,7 @@
 use zyoza_core::{AssetDesc, OrchardMemoSeal, SettlementAdapter, PROTOCOL_VERSION};
 use zyoza_oob::{InMemoryStorage, OobKeypair};
 use zyoza_profile_nft::{CollectionPolicy, ProvenanceEvent};
-use zyoza_proofs::RaguPcdEngine;
+use zyoza_proofs::{derive_owner_tag, RaguPcdEngine};
 use zyoza_sdk::ZyozaNftClient;
 use zyoza_settlement::{
     aggregate_signatures, keygen_dealer, round1_commit, round2_sign, verify_frost_signature,
@@ -48,12 +48,13 @@ fn burn_phase1_seal_and_crystallize_into_native_zsa_with_frost() {
         )
         .unwrap();
 
-    // 2. Prove burn/migration via Ragu MigrationCircuit
+    // 2. Prove burn/migration via Ragu MigrationCircuit bound to owner_tag
+    let alice_tag = derive_owner_tag(b"alice-phase1-sk");
     let mig_proof = RaguPcdEngine
         .prove_migration(&minted.asset_id, minted.commitment, b"alice-phase1-sk")
         .unwrap();
     assert!(RaguPcdEngine
-        .verify_migration(&minted.asset_id, minted.commitment, &mig_proof)
+        .verify_migration(&minted.asset_id, minted.commitment, alice_tag, &mig_proof)
         .unwrap());
 
     // Burn Phase 1 seal by transferring to a terminal burn commitment

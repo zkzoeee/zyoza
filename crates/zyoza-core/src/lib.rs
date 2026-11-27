@@ -121,8 +121,9 @@ mod tests {
 
     impl ProofEngine for MockProofEngine {
         fn prove_ownership(&self, req: &OwnershipProofRequest) -> Result<ProofBytes, ZyozaError> {
-            let mut proof = Vec::with_capacity(64);
+            let mut proof = Vec::with_capacity(96);
             proof.extend_from_slice(&req.collection_root);
+            proof.extend_from_slice(&req.state_root);
             proof.extend_from_slice(&req.challenge);
             Ok(proof)
         }
@@ -132,9 +133,10 @@ mod tests {
             req: &OwnershipVerifyRequest,
             proof: &[u8],
         ) -> Result<bool, ZyozaError> {
-            Ok(proof.len() == 64
+            Ok(proof.len() == 96
                 && proof[..32] == req.collection_root
-                && proof[32..] == req.challenge)
+                && proof[32..64] == req.state_root
+                && proof[64..] == req.challenge)
         }
 
         fn prove_transition(
@@ -252,6 +254,7 @@ mod tests {
         let proof = prover
             .prove_ownership(&OwnershipProofRequest {
                 asset_id,
+                state_root: [0x44; 32],
                 collection_root: [0x99; 32],
                 merkle_siblings: vec![],
                 secret_witness: vec![1, 2, 3],
@@ -262,6 +265,7 @@ mod tests {
             .verify_ownership(
                 &OwnershipVerifyRequest {
                     collection_root: [0x99; 32],
+                    state_root: [0x44; 32],
                     challenge: [0xAB; 32],
                 },
                 &proof

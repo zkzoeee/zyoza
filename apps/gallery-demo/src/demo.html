@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="Zyoza Studio — interactive cryptographic workbench for ZIP 227 identity, Pallas ECDH OOB wrapping, real Ragu recursive PCD folding, Poseidon-Merkle ownership proofs, and commit-reveal auctions." />
+  <meta name="description" content="Zyoza Studio — interactive cryptographic workbench for ZIP 227 identity, Pallas ECDH OOB wrapping, Ragu recursive PCD folding, Poseidon-Merkle ownership proofs, and browser-hashed commit-reveal auctions." />
   <link rel="icon" href="/logo.png" />
   <title>Zyoza Studio — Mint, Transfer, Fold, Disclose, Trade &amp; Crystallize</title>
   <style>
@@ -40,6 +40,34 @@
     }
     .proto-banner strong { color: var(--accent); }
 
+    .busy-bar {
+      display: none;
+      position: sticky;
+      top: 0;
+      z-index: 60;
+      background: #171614;
+      color: #FAF8F3;
+      padding: 0.52rem 1.25rem;
+      font-family: var(--mono);
+      font-size: 0.76rem;
+      text-align: center;
+      border-bottom: 2px solid var(--accent);
+      align-items: center;
+      justify-content: center;
+      gap: 0.65rem;
+    }
+    .busy-bar.active { display: flex; }
+    .spinner {
+      width: 13px;
+      height: 13px;
+      border: 2px solid rgba(255,255,255,0.28);
+      border-top-color: #F4B728;
+      border-radius: 50%;
+      animation: spin 0.75s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
     header {
       border-bottom: 1px solid var(--line);
       padding: 1rem 2rem;
@@ -50,9 +78,7 @@
       gap: 0.75rem;
       background: var(--card);
     }
-    @media (max-width: 560px) {
-      header { padding: 0.85rem 1rem; }
-    }
+    @media (max-width: 560px) { header { padding: 0.85rem 1rem; } }
     .brand { display: flex; align-items: center; gap: 0.65rem; font-family: var(--serif); font-size: 1.15rem; font-weight: 600; }
     .brand img { width: 34px; height: 34px; border-radius: 6px; object-fit: cover; border: 1px solid var(--line); }
     .nav-links { display: flex; gap: 1rem; font-size: 0.86rem; color: var(--muted); align-items: center; flex-wrap: wrap; }
@@ -63,45 +89,46 @@
       margin: 0 auto;
       padding: 1.75rem 2rem;
       display: grid;
-      grid-template-columns: 1.35fr 0.9fr;
+      grid-template-columns: 1.36fr 0.89fr;
       gap: 2rem;
       align-items: start;
     }
-    @media (max-width: 940px) {
-      .layout { grid-template-columns: 1fr; padding: 1.25rem 1rem; }
-    }
+    @media (max-width: 940px) { .layout { grid-template-columns: 1fr; padding: 1.25rem 1rem; } }
 
     .step-card { background: var(--card); border: 1px solid var(--line); padding: 1.35rem 1.45rem; margin-bottom: 1.15rem; }
     .step-head { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem; flex-wrap: wrap; }
     .step-num { font-family: var(--mono); color: var(--accent); font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; }
-    .badges { display: flex; gap: 0.4rem; align-items: center; }
+    .badges { display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; }
     .impl-tag { font-family: var(--mono); font-size: 0.66rem; padding: 2px 6px; border: 1px solid var(--line); color: var(--muted); background: var(--paper-alt); }
     .step-badge { font-family: var(--mono); font-size: 0.7rem; padding: 2px 8px; border: 1px solid var(--line); color: var(--muted); background: var(--paper); }
     .step-badge.ready { border-color: var(--amber); color: var(--amber); background: #FBF4E4; }
     .step-badge.done { border-color: var(--pine); color: var(--pine); background: #E9F3EE; }
 
     h2 { font-family: var(--serif); font-weight: 600; font-size: 1.16rem; margin-bottom: 0.38rem; }
-    p.desc { font-size: 0.86rem; color: var(--muted); margin-bottom: 0.95rem; }
+    p.desc { font-size: 0.85rem; color: var(--muted); margin-bottom: 0.9rem; }
+    p.caveat { font-size: 0.78rem; color: var(--muted); background: var(--paper-alt); border-left: 2px solid var(--amber); padding: 0.45rem 0.65rem; margin-bottom: 0.85rem; }
     code { font-family: var(--mono); font-size: 0.84em; background: var(--paper-alt); padding: 0.08rem 0.28rem; border: 1px solid var(--line); }
 
-    .row { display: flex; flex-wrap: wrap; gap: 0.55rem; align-items: center; margin-bottom: 0.65rem; }
+    .row { display: flex; flex-wrap: wrap; gap: 0.55rem; align-items: center; margin-bottom: 0.6rem; }
     select, input { background: var(--paper); border: 1px solid var(--line); color: var(--ink); padding: 0.48rem 0.65rem; font-size: 0.84rem; font-family: var(--sans); max-width: 100%; }
     select:disabled, input:disabled { opacity: 0.55; cursor: not-allowed; }
-    button { background: var(--ink); color: var(--paper); border: 1px solid var(--ink); padding: 0.5rem 0.92rem; font-size: 0.81rem; font-weight: 500; cursor: pointer; transition: all 0.12s; }
+    button { background: var(--ink); color: var(--paper); border: 1px solid var(--ink); padding: 0.48rem 0.88rem; font-size: 0.8rem; font-weight: 500; cursor: pointer; transition: all 0.12s; }
     button:hover:not(:disabled) { background: var(--accent); border-color: var(--accent); }
-    button:disabled { opacity: 0.38; cursor: not-allowed; }
+    button:disabled { opacity: 0.36; cursor: not-allowed; }
     button.secondary { background: transparent; color: var(--ink); border-color: var(--line); }
     button.secondary:hover:not(:disabled) { border-color: var(--ink); background: var(--paper-alt); }
+    button.neg { background: #FDF2F1; color: var(--accent); border-color: #E3B5B0; }
+    button.neg:hover:not(:disabled) { background: var(--accent); color: #fff; border-color: var(--accent); }
     button.danger { background: transparent; color: var(--accent); border-color: var(--accent); padding: 0.36rem 0.75rem; font-size: 0.78rem; }
     button.danger:hover:not(:disabled) { background: var(--accent); color: #fff; }
 
-    .kv { background: var(--paper); border: 1px solid var(--line); padding: 0.75rem; font-family: var(--mono); font-size: 0.73rem; word-break: break-all; margin-top: 0.55rem; }
+    .kv { background: var(--paper); border: 1px solid var(--line); padding: 0.75rem; font-family: var(--mono); font-size: 0.72rem; word-break: break-all; margin-top: 0.55rem; }
     .kv div { margin-bottom: 0.28rem; }
     .kv div:last-child { margin-bottom: 0; }
     .kv span.k { color: var(--muted); margin-right: 0.35rem; }
 
     /* Sticky Inspector */
-    .inspector { position: sticky; top: 1.25rem; background: var(--card); border: 1px solid var(--line); padding: 1.35rem; }
+    .inspector { position: sticky; top: 3rem; background: var(--card); border: 1px solid var(--line); padding: 1.35rem; }
     .art-row { display: flex; gap: 1rem; align-items: center; margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid var(--line); }
     #demo-svg { width: 96px; height: 96px; border: 1px solid var(--line); background: #DDD6C7; flex-shrink: 0; }
     .memo-bar { display: grid; grid-template-columns: 16% 10% 8% 20% 18% 28%; height: 24px; border: 1px solid var(--ink); font-family: var(--mono); font-size: 0.6rem; text-align: center; line-height: 22px; margin: 0.55rem 0; overflow: hidden; }
@@ -111,13 +138,12 @@
     .m-root { background: #EFECE3; }
     .m-uri { background: var(--paper); color: var(--muted); }
 
-    .log { background: #151619; color: #D8DEE9; font-family: var(--mono); font-size: 0.72rem; padding: 0.85rem; height: 310px; overflow-y: auto; line-height: 1.5; margin-top: 0.65rem; }
+    .log { background: #151619; color: #D8DEE9; font-family: var(--mono); font-size: 0.72rem; padding: 0.85rem; height: 320px; overflow-y: auto; line-height: 1.5; margin-top: 0.65rem; }
     .log div { margin-bottom: 0.3rem; word-break: break-word; }
     .log .ok { color: #8FBCBB; font-weight: 600; }
     .log .err { color: #BF616A; font-weight: 600; }
     .log .hl { color: #EBCB8B; font-weight: 600; }
 
-    /* Mobile / Narrow Sticky Feedback Bar */
     .mobile-toast {
       display: none;
       position: fixed;
@@ -135,14 +161,17 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    @media (max-width: 940px) {
-      .mobile-toast { display: block; }
-    }
+    @media (max-width: 940px) { .mobile-toast { display: block; } }
   </style>
 </head>
 <body>
   <div class="proto-banner">
-    <strong>Research Prototype:</strong> Real <code>tachyon-zcash/ragu</code> PCD, Pallas ECDH &amp; AEAD executing over an <strong>in-memory simulated ledger</strong>. Not audited.
+    <strong>Research Prototype:</strong> Real <code>tachyon-zcash/ragu</code> proofs &amp; Pallas ECDH over an <strong>in-memory simulated ledger</strong> (actor keys are derived demo stand-ins). Not audited.
+  </div>
+
+  <div id="busy-bar" class="busy-bar" role="status" aria-live="polite">
+    <div class="spinner"></div>
+    <span id="busy-text">Running Ragu prover...</span>
   </div>
 
   <header>
@@ -160,18 +189,18 @@
   </header>
 
   <div class="layout">
-    <div>
+    <div id="steps-col">
       <!-- STEP 1: GOVERNED MINT -->
       <div class="step-card">
         <div class="step-head">
-          <span class="step-num">Step 01 · Governed Mint &amp; 512B ZIP 302 Seal</span>
+          <span class="step-num">Step 01 · Governed Mint, Ragu Seed &amp; Bound Supply Cap</span>
           <div class="badges">
-            <span class="impl-tag">Crypto: Real · Ledger: In-Memory</span>
+            <span class="impl-tag">Ragu Mint + Cap: Real · Ledger: Sim</span>
             <span id="badge-1" class="step-badge ready">Ready</span>
           </div>
         </div>
-        <h2>Mint a Shielded Specimen (<code>CollectionSpec</code>)</h2>
-        <p class="desc">Derives ZIP 227 <code>AssetDigest</code> + Pallas <code>AssetBase</code>, seals encrypted state under <code>ChaCha20Poly1305</code>, seeds Ragu <code>MintCircuit</code>, and records deterministic anti-duplicate nullifiers (<code>NF_aid</code>, <code>NF_idx</code>, <code>NF_med</code>) in the simulated ledger.</p>
+        <h2>Mint Specimen (<code>MintCircuit</code> + <code>IssuanceCapCircuit</code>)</h2>
+        <p class="desc">Derives ZIP 227 <code>AssetDigest</code>, encrypts state with OS CSPRNG nonces, seeds the 10-slot Ragu <code>LineageHeader</code>, proves <code>1 &le; slot &le; 100</code> bound to <code>(collection_id, asset_id)</code>, and records <code>NF_aid/idx/med</code> in the simulated ledger.</p>
         <div class="row">
           <select id="preset" onchange="onPresetChange()">
             <option value="nounz-venetian">Nounz Dumpling — Venetian Gold (⌐≡-≡)</option>
@@ -180,28 +209,28 @@
             <option value="lootz-kit">Lootz Bag #07 — Dumpling Syndicate Kit</option>
           </select>
           <input id="slot-idx" type="number" value="1" min="1" max="100" style="width:82px" title="Token Slot (1..=100)" />
-          <button id="btn-mint" onclick="doMint()">Mint Shielded Zyoza</button>
-          <button id="btn-dup" class="secondary" onclick="doDuplicateAttack()" disabled>Test Duplicate Mint Attack</button>
+          <button id="btn-mint" data-ctrl onclick="doMint()">Mint Shielded Zyoza</button>
+          <button id="btn-dup" data-ctrl class="neg" onclick="doDuplicateAttack()" disabled>Attack: Duplicate Mint</button>
         </div>
         <div id="out-1" class="kv" style="display:none"></div>
       </div>
 
-      <!-- STEP 2: OOB P2P TRANSFER -->
+      <!-- STEP 2: OOB P2P TRANSFER + LINEAGE FOLD -->
       <div class="step-card">
         <div class="step-head">
-          <span class="step-num">Step 02 · Out-of-Band Key Handover (Alice → Bob)</span>
+          <span class="step-num">Step 02 · Pallas ECDH Key Handover &amp; Transfer Fold (Alice → Bob)</span>
           <div class="badges">
-            <span class="impl-tag">Pallas ECDH + HKDF: Real</span>
+            <span class="impl-tag">ECDH + RoyaltyStep Fold: Real</span>
             <span id="badge-2" class="step-badge">Locked</span>
           </div>
         </div>
-        <h2>Transfer &amp; Re-Wrap 32B DEK via Pallas ECDH</h2>
-        <p class="desc">Retires Alice's seal in the in-memory ledger and re-wraps the 32-byte <code>ChaCha20Poly1305</code> DEK for Bob's Pallas public key without re-uploading encrypted media. Test decryption under each actor's key anytime after mint.</p>
+        <h2>Re-Wrap 32B DEK &amp; Fold Lineage Ownership to Bob</h2>
+        <p class="desc">Spends Alice's simulated seal with fresh OS randomness, re-wraps the 32B <code>ChaCha20Poly1305</code> DEK to Bob's Pallas key, and fuses a Ragu <code>RoyaltyStep</code> updating <code>owner_tag</code> from Alice to Bob.</p>
         <div class="row">
-          <button id="btn-xfer" onclick="doTransfer()" disabled>Transfer Alice → Bob</button>
-          <button id="btn-dec-alice" class="secondary" onclick="tryDecrypt('alice')" disabled>Decrypt as Alice</button>
-          <button id="btn-dec-bob" class="secondary" onclick="tryDecrypt('bob')" disabled>Decrypt as Bob</button>
-          <button id="btn-dec-carol" class="secondary" onclick="tryDecrypt('carol')" disabled>Decrypt as Carol</button>
+          <button id="btn-xfer" data-ctrl onclick="doTransfer()" disabled>Transfer Alice → Bob</button>
+          <button id="btn-dec-alice" data-ctrl class="secondary" onclick="tryDecrypt('alice')" disabled>Decrypt as Alice</button>
+          <button id="btn-dec-bob" data-ctrl class="secondary" onclick="tryDecrypt('bob')" disabled>Decrypt as Bob</button>
+          <button id="btn-dec-carol" data-ctrl class="secondary" onclick="tryDecrypt('carol')" disabled>Decrypt as Carol</button>
         </div>
         <div id="out-2" class="kv" style="display:none"></div>
       </div>
@@ -209,58 +238,62 @@
       <!-- STEP 3: RAGU NON-UNIFORM PCD -->
       <div class="step-card">
         <div class="step-head">
-          <span class="step-num">Step 03 · Ragu Non-Uniform Recursive PCD</span>
+          <span class="step-num">Step 03 · Ragu Non-Uniform Recursive PCD &amp; Negative Tests</span>
           <div class="badges">
-            <span class="impl-tag">tachyon-zcash/ragu: Real</span>
+            <span class="impl-tag">10-Slot Verified Header</span>
             <span id="badge-3" class="step-badge">Locked</span>
           </div>
         </div>
-        <h2>Fold Heterogeneous Subcircuits via <code>Application::fuse</code></h2>
-        <p class="desc">Recursively fuses real Ragu <code>Step&lt;Pasta&gt;</code> subcircuits—including the in-circuit boolean <code>RoyaltyCircuit</code> gate, Poseidon <code>TicketCheckInCircuit</code> (<code>TKT1</code>), and <code>UpgradeCircuit</code> (<code>GAM1</code>)—and verifies via <code>verify_compressed</code>.</p>
+        <h2>Fold Subcircuits &amp; Test Royalty / Ticket-Replay Guards</h2>
+        <p class="desc">Every fold checks the current holder's secret against <code>SLOT_OWNER_TAG</code>, advances the ledger commitment, and verifies all 10 header slots via <code>verify_compressed</code>. Clicking <code>TicketCheckIn</code> twice demonstrates public <code>SLOT_EVENT_NF</code> replay blocking.</p>
+        <p class="caveat"><strong>Ragu Privacy Note:</strong> Terminal <code>CompressedProof&lt;Pasta&gt;</code> hides step witnesses from verifiers, but continuing a fold requires passing the uncompressed proof to the next owner (not yet unlinkable/ZK in upstream Ragu).</p>
         <div class="row">
-          <button id="btn-fold-royalty" onclick="doFold('RoyaltyStep', 'NFT1')" disabled>+ Fold RoyaltyCircuit (NFT1)</button>
-          <button id="btn-fold-ticket" class="secondary" onclick="doFold('TicketCheckInStep', 'TKT1')" disabled>+ Fold TicketCheckIn (TKT1)</button>
-          <button id="btn-fold-upgrade" class="secondary" onclick="doFold('AttributeUpgradeStep', 'GAM1')" disabled>+ Fold UpgradeCircuit (GAM1)</button>
+          <button id="btn-fold-royalty" data-ctrl onclick="doFold('RoyaltyStep', 'NFT1', false)" disabled>+ Fold RoyaltyStep (NFT1)</button>
+          <button id="btn-fold-ticket" data-ctrl class="secondary" onclick="doFold('TicketCheckInStep', 'TKT1', false)" disabled>+ Fold TicketCheckIn (TKT1)</button>
+          <button id="btn-fold-upgrade" data-ctrl class="secondary" onclick="doFold('AttributeUpgradeStep', 'GAM1', false)" disabled>+ Fold UpgradeStep (GAM1)</button>
+          <button id="btn-fold-unpaid" data-ctrl class="neg" onclick="doFold('RoyaltyStep', 'NFT1', true)" disabled>Attack: Unpaid Royalty</button>
         </div>
         <div id="out-3" class="kv" style="display:none"></div>
       </div>
 
-      <!-- STEP 4: OVK DISCLOSURE & MERKLE ZK OWNERSHIP -->
+      <!-- STEP 4: OVK DISCLOSURE, TRAIT PROOF & MERKLE ZK OWNERSHIP -->
       <div class="step-card">
         <div class="step-head">
-          <span class="step-num">Step 04 · Server OVK Preview &amp; Poseidon-Merkle Ownership</span>
+          <span class="step-num">Step 04 · OVK Disclosure, Trait Merkle &amp; Bound Ownership</span>
           <div class="badges">
-            <span class="impl-tag">Ragu Merkle ZK: Real</span>
+            <span class="impl-tag">Multi-Leaf Root + One-Time Server Challenge</span>
             <span id="badge-4" class="step-badge">Locked</span>
           </div>
         </div>
-        <h2>List Privately with a Collection Merkle Inclusion Proof</h2>
-        <p class="desc">Queries the server with or without the per-object <code>ObjectViewingKey</code>, then proves depth-4 Poseidon Merkle inclusion + owner secret preimage against a fresh random verifier challenge.</p>
+        <h2>List Privately with State-Bound Merkle Inclusion</h2>
+        <p class="desc">Verifies the session's lineage proof against the ledger, proves <code>OwnershipMerkleCircuit</code> over the gallery's multi-holder collection tree bound to <code>(collection_root, state_root, one_time_challenge)</code>, or tests a wrong-secret proof.</p>
         <div class="row">
-          <button id="btn-toggle-ovk" class="secondary" onclick="toggleOvkPreview()" disabled>Server Preview: Toggle OVK</button>
-          <input id="reserve-zats" type="number" value="50000000" style="width:140px" title="Reserve (zatoshis)" disabled />
-          <button id="btn-list" onclick="doListGallery()" disabled>Prove Merkle Ownership &amp; List</button>
+          <button id="btn-toggle-ovk" data-ctrl class="secondary" onclick="toggleOvkPreview()" disabled>Server Preview: Toggle OVK</button>
+          <button id="btn-prove-trait" data-ctrl class="secondary" onclick="doProveTrait()" disabled>Prove Committed Trait</button>
+          <input id="reserve-zats" data-ctrl type="number" value="50000000" style="width:135px" title="Reserve (zatoshis)" disabled />
+          <button id="btn-list" data-ctrl onclick="doListGallery()" disabled>Prove Ownership &amp; List</button>
+          <button id="btn-list-bad" data-ctrl class="neg" onclick="doWrongSecretListing()" disabled>Attack: Wrong-Secret Proof</button>
         </div>
         <div id="out-4" class="kv" style="display:none"></div>
       </div>
 
-      <!-- STEP 5: COMMIT-REVEAL SEALED-BID AUCTION -->
+      <!-- STEP 5: BROWSER-HASHED COMMIT-REVEAL SEALED-BID AUCTION -->
       <div class="step-card">
         <div class="step-head">
-          <span class="step-num">Step 05 · Commit-Reveal Sealed-Bid Auction</span>
+          <span class="step-num">Step 05 · Browser-Hashed Commit-Reveal Auction</span>
           <div class="badges">
-            <span class="impl-tag">Commit-Reveal: Real · ZEC Settlement: Simulated</span>
+            <span class="impl-tag">Browser SHA-256 Commit · Sim ZEC Clear</span>
             <span id="badge-5" class="step-badge">Locked</span>
           </div>
         </div>
-        <h2>Commit Salted Hash → Reveal Bid → Clear &amp; Transfer DEK</h2>
-        <p class="desc">Commits <code>BLAKE2b-256(listing || bidder || zats || salt)</code> so <code>GET /api/listings</code> hides bid values until reveal. Clearing settles the highest revealed bid ≥ reserve and re-wraps the OOB DEK to the winner.</p>
+        <h2>Hash Bid Locally in Browser → Reveal → Clear &amp; Fold Transfer</h2>
+        <p class="desc">Your browser generates a 32-byte CSPRNG salt and hashes <code>SHA-256("ZYOZA-BID-CMT-v2" || ...)</code> locally—sending <strong>only the 32-byte hash</strong> on Commit (the server never sees <code>bid_zatoshis</code> until Reveal). Clearing folds a Ragu transfer + DEK re-wrap to the winner.</p>
         <div class="row">
-          <input id="bidder-name" value="carol" style="width:96px" title="Bidder ID" disabled />
-          <input id="bid-zats" type="number" value="85000000" style="width:130px" title="Bid (zatoshis)" disabled />
-          <button id="btn-bid-commit" onclick="doCommitBid()" disabled>1. Commit Salted Bid</button>
-          <button id="btn-bid-reveal" class="secondary" onclick="doRevealBid()" disabled>2. Reveal Bid</button>
-          <button id="btn-clear" class="secondary" onclick="doClear()" disabled>3. Clear &amp; Transfer</button>
+          <input id="bidder-name" data-ctrl value="carol" style="width:94px" title="Bidder ID" disabled />
+          <input id="bid-zats" data-ctrl type="number" value="85000000" style="width:128px" title="Bid (zatoshis)" disabled />
+          <button id="btn-bid-commit" data-ctrl onclick="doCommitBid()" disabled>1. Commit Hash (Local)</button>
+          <button id="btn-bid-reveal" data-ctrl class="secondary" onclick="doRevealBid()" disabled>2. Reveal Bid &amp; Salt</button>
+          <button id="btn-clear" data-ctrl class="secondary" onclick="doClear()" disabled>3. Clear &amp; Fold Transfer</button>
         </div>
         <div id="out-5" class="kv" style="display:none"></div>
       </div>
@@ -270,14 +303,14 @@
         <div class="step-head">
           <span class="step-num">Step 06 · Burn-to-Crystallize into Stage II ZSA</span>
           <div class="badges">
-            <span class="impl-tag">2-of-3 Schnorr: Real · ZSA Ledger: Simulated</span>
+            <span class="impl-tag">Owner-Bound MigrationCircuit + 2-of-3 Schnorr</span>
             <span id="badge-6" class="step-badge">Locked</span>
           </div>
         </div>
-        <h2>1:1 Upgrade via Ragu Migration Proof + 2-of-3 Pallas Schnorr</h2>
-        <p class="desc">Proves Stage I migration via Ragu <code>MigrationCircuit</code>, retires the Stage I seal, co-signs issuance with a <code>2-of-3</code> Pallas threshold committee (trusted-dealer setup), and mints a simulated Stage II <code>ZsaNote</code> (<code>value = 1</code>, finalized supply), permanently locking Stage I actions.</p>
+        <h2>1:1 Upgrade Verifying Lineage + Owner-Bound Migration Proof</h2>
+        <p class="desc">Verifies the current Ragu lineage proof against the ledger, proves <code>MigrationCircuit</code> bound to the current <code>owner_tag</code>, co-signs with <code>2-of-3</code> Pallas Schnorr (trusted-dealer demo setup), and mints a simulated Stage II <code>ZsaNote</code>.</p>
         <div class="row">
-          <button id="btn-crys" onclick="doCrystallize()" disabled>Burn Stage I Seal &amp; Crystallize ZSA</button>
+          <button id="btn-crys" data-ctrl onclick="doCrystallize()" disabled>Burn Stage I Seal &amp; Crystallize ZSA</button>
         </div>
         <div id="out-6" class="kv" style="display:none"></div>
       </div>
@@ -312,9 +345,11 @@
   <div id="mobile-toast" class="mobile-toast">[zyoza-studio] Ready. Select a specimen and click Mint.</div>
 
   <script>
+    const STORAGE_KEY = 'zyoza_studio_session_v2';
     const INITIAL_STATE = () => ({
       sessionId: null,
       mintedPreset: null,
+      tokenIndex: 1,
       assetId: null,
       assetBase: null,
       owner: null,
@@ -322,9 +357,27 @@
       listingId: null,
       hops: 0,
       lastBid: null,
-      crystallized: false
+      bidRevealed: false,
+      auctionCleared: false,
+      crystallized: false,
+      busy: false
     });
     let S = INITIAL_STATE();
+
+    function saveLocalSession() {
+      try {
+        if (!S.sessionId) {
+          sessionStorage.removeItem(STORAGE_KEY);
+        } else {
+          sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
+            sessionId: S.sessionId,
+            lastBid: S.lastBid,
+            bidRevealed: S.bidRevealed,
+            auctionCleared: S.auctionCleared
+          }));
+        }
+      } catch (_) {}
+    }
 
     function appendLog(prefix, detail, cls = '') {
       const logBox = document.getElementById('log');
@@ -338,9 +391,7 @@
       row.appendChild(body);
       logBox.appendChild(row);
       logBox.scrollTop = logBox.scrollHeight;
-
-      const toast = document.getElementById('mobile-toast');
-      toast.textContent = `${prefix} ${detail}`;
+      document.getElementById('mobile-toast').textContent = `${prefix} ${detail}`;
     }
 
     function renderKv(containerId, pairs) {
@@ -364,6 +415,72 @@
       const el = document.getElementById(id);
       el.textContent = text;
       el.className = 'step-badge' + (stateCls ? ' ' + stateCls : '');
+    }
+
+    // Recomputes exact button enabled/disabled state whenever not busy
+    function syncControls() {
+      const setDis = (id, d) => { const el = document.getElementById(id); if (el) el.disabled = S.busy || d; };
+      const minted = Boolean(S.sessionId);
+      const crys = S.crystallized;
+
+      setDis('preset', minted);
+      setDis('slot-idx', minted);
+      setDis('btn-mint', minted);
+      setDis('btn-dup', !minted || crys);
+
+      setDis('btn-xfer', !minted || crys || S.owner !== 'alice');
+      setDis('btn-dec-alice', !minted);
+      setDis('btn-dec-bob', !minted);
+      setDis('btn-dec-carol', !minted);
+
+      const canFold = minted && !crys && (S.owner !== 'alice' || S.hops >= 1);
+      const step3Unlocked = minted && !crys && (S.owner !== 'alice' || S.hops > 1);
+      setDis('btn-fold-royalty', !step3Unlocked);
+      setDis('btn-fold-ticket', !step3Unlocked);
+      setDis('btn-fold-upgrade', !step3Unlocked);
+      setDis('btn-fold-unpaid', !step3Unlocked);
+
+      const step4Unlocked = minted && !crys && S.hops >= 2;
+      setDis('btn-toggle-ovk', !step4Unlocked);
+      setDis('btn-prove-trait', !step4Unlocked);
+      setDis('reserve-zats', !step4Unlocked || Boolean(S.listingId));
+      setDis('btn-list', !step4Unlocked || Boolean(S.listingId));
+      setDis('btn-list-bad', !step4Unlocked || Boolean(S.listingId));
+
+      const step5Open = minted && !crys && Boolean(S.listingId) && !S.auctionCleared;
+      setDis('bidder-name', !step5Open);
+      setDis('bid-zats', !step5Open);
+      setDis('btn-bid-commit', !step5Open);
+      setDis('btn-bid-reveal', !step5Open || !S.lastBid || S.bidRevealed);
+      setDis('btn-clear', !step5Open || !S.bidRevealed);
+
+      const step6Unlocked = minted && !crys && S.auctionCleared;
+      setDis('btn-crys', !step6Unlocked);
+      document.getElementById('btn-reset').disabled = S.busy;
+      void canFold;
+    }
+
+    async function withBusy(label, fn) {
+      if (S.busy) return;
+      S.busy = true;
+      syncControls();
+      const bar = document.getElementById('busy-bar');
+      const txt = document.getElementById('busy-text');
+      const t0 = performance.now();
+      txt.textContent = `${label} (0.0s elapsed)`;
+      bar.classList.add('active');
+      const timer = setInterval(() => {
+        const sec = ((performance.now() - t0) / 1000).toFixed(1);
+        txt.textContent = `${label} (${sec}s elapsed)`;
+      }, 150);
+      try {
+        return await fn();
+      } finally {
+        clearInterval(timer);
+        bar.classList.remove('active');
+        S.busy = false;
+        syncControls();
+      }
     }
 
     function onPresetChange() {
@@ -481,17 +598,18 @@
         ${lenses}`;
     }
 
-    async function api(path, body) {
+    async function api(path, body, method = 'POST') {
       if (location.protocol === 'file:') {
         throw new Error('Opened as local file:// — start the Rust server (`cargo run -p zyoza-gallery-demo`) to execute real Ragu proofs.');
       }
       let res;
       try {
-        res = await fetch(path, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(body || {})
-        });
+        const opts = { method, headers: {} };
+        if (method !== 'GET') {
+          opts.headers['content-type'] = 'application/json';
+          opts.body = JSON.stringify(body || {});
+        }
+        res = await fetch(path, opts);
       } catch (_) {
         throw new Error('Cannot reach Zyoza server — run `cargo run -p zyoza-gallery-demo` and reload.');
       }
@@ -500,112 +618,230 @@
       return data;
     }
 
-    async function doReset() {
-      try {
-        if (location.protocol !== 'file:') {
-          await api('/api/demo/reset', {});
+    // Pure-JS SHA-256 fallback if `crypto.subtle` is unavailable on a non-HTTPS LAN origin
+    function sha256Fallback(bytes) {
+      const K = [
+        0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+        0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+        0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+        0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+        0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+        0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+        0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+        0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
+      ];
+      const rotr = (n, x) => (x >>> n) | (x << (32 - n));
+      const l = bytes.length;
+      const bitLen = l * 8;
+      const padLen = ((l + 9 + 63) >> 6) << 6;
+      const buf = new Uint8Array(padLen);
+      buf.set(bytes);
+      buf[l] = 0x80;
+      const dv = new DataView(buf.buffer);
+      dv.setUint32(padLen - 4, bitLen >>> 0, false);
+      dv.setUint32(padLen - 8, Math.floor(bitLen / 0x100000000), false);
+      let H = [0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+      const W = new Uint32Array(64);
+      for (let off = 0; off < padLen; off += 64) {
+        for (let i = 0; i < 16; i++) W[i] = dv.getUint32(off + i * 4, false);
+        for (let i = 16; i < 64; i++) {
+          const s0 = rotr(7, W[i-15]) ^ rotr(18, W[i-15]) ^ (W[i-15] >>> 3);
+          const s1 = rotr(17, W[i-2]) ^ rotr(19, W[i-2]) ^ (W[i-2] >>> 10);
+          W[i] = (W[i-16] + s0 + W[i-7] + s1) >>> 0;
         }
-      } catch (e) {
-        appendLog('[warn]', e.message, 'err');
+        let [a,b,c,d,e,f,g,h] = H;
+        for (let i = 0; i < 64; i++) {
+          const S1 = rotr(6, e) ^ rotr(11, e) ^ rotr(25, e);
+          const ch = (e & f) ^ (~e & g);
+          const t1 = (h + S1 + ch + K[i] + W[i]) >>> 0;
+          const S0 = rotr(2, a) ^ rotr(13, a) ^ rotr(22, a);
+          const maj = (a & b) ^ (a & c) ^ (b & c);
+          const t2 = (S0 + maj) >>> 0;
+          h = g; g = f; f = e; e = (d + t1) >>> 0; d = c; c = b; b = a; a = (t1 + t2) >>> 0;
+        }
+        H = H.map((v, idx) => (v + [a,b,c,d,e,f,g,h][idx]) >>> 0);
       }
-      S = INITIAL_STATE();
-      document.getElementById('preset').disabled = false;
-      document.getElementById('slot-idx').disabled = false;
-      document.getElementById('btn-mint').disabled = false;
-      [
-        'btn-dup', 'btn-xfer', 'btn-dec-alice', 'btn-dec-bob', 'btn-dec-carol',
-        'btn-fold-royalty', 'btn-fold-ticket', 'btn-fold-upgrade',
-        'btn-toggle-ovk', 'reserve-zats', 'btn-list',
-        'bidder-name', 'bid-zats', 'btn-bid-commit', 'btn-bid-reveal', 'btn-clear',
-        'btn-crys'
-      ].forEach(id => { document.getElementById(id).disabled = true; });
-      ['out-1', 'out-2', 'out-3', 'out-4', 'out-5', 'out-6'].forEach(id => {
-        const el = document.getElementById(id);
-        el.style.display = 'none';
-        el.textContent = '';
+      const out = new Uint8Array(32);
+      const odv = new DataView(out.buffer);
+      H.forEach((v, i) => odv.setUint32(i * 4, v, false));
+      return out;
+    }
+
+    // Browser-local salted SHA-256 matching `compute_bid_commitment` in Rust:
+    // SHA-256("ZYOZA-BID-CMT-v2" || listing_id_be8 || bidder_len_be4 || bidder_utf8 || bid_zats_be8 || salt_32)
+    async function computeBidCommitmentBrowser(listingId, bidderId, bidZats, saltBytes) {
+      const enc = new TextEncoder();
+      const domain = enc.encode('ZYOZA-BID-CMT-v2');
+      const bidderBytes = enc.encode(bidderId);
+      const total = 16 + 8 + 4 + bidderBytes.length + 8 + 32;
+      const preimage = new Uint8Array(total);
+      const dv = new DataView(preimage.buffer);
+      let off = 0;
+      preimage.set(domain, off); off += 16;
+      dv.setBigUint64(off, BigInt(listingId), false); off += 8;
+      dv.setUint32(off, bidderBytes.length, false); off += 4;
+      preimage.set(bidderBytes, off); off += bidderBytes.length;
+      dv.setBigUint64(off, BigInt(bidZats), false); off += 8;
+      preimage.set(saltBytes, off);
+
+      let digestBytes;
+      if (window.crypto && window.crypto.subtle) {
+        const buf = await window.crypto.subtle.digest('SHA-256', preimage);
+        digestBytes = new Uint8Array(buf);
+      } else {
+        digestBytes = sha256Fallback(preimage);
+      }
+      return Array.from(digestBytes, b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    async function doReset() {
+      await withBusy('Resetting session & in-memory ledgers', async () => {
+        try {
+          if (location.protocol !== 'file:') {
+            await api('/api/demo/reset', {});
+          }
+        } catch (e) {
+          appendLog('[warn]', e.message, 'err');
+        }
+        S = INITIAL_STATE();
+        saveLocalSession();
+        ['out-1', 'out-2', 'out-3', 'out-4', 'out-5', 'out-6'].forEach(id => {
+          const el = document.getElementById(id);
+          el.style.display = 'none';
+          el.textContent = '';
+        });
+        setBadge('badge-1', 'Ready', 'ready');
+        ['badge-2', 'badge-3', 'badge-4', 'badge-5', 'badge-6'].forEach(id => setBadge(id, 'Locked'));
+        document.getElementById('insp-stage').textContent = 'STAGE: UNMINTED';
+        document.getElementById('insp-owner').textContent = 'Owner: —';
+        renderPresetArt(document.getElementById('preset').value);
+        appendLog('[reset]', 'Session & in-memory settlement ledgers reset.', 'hl');
       });
-      setBadge('badge-1', 'Ready', 'ready');
-      ['badge-2', 'badge-3', 'badge-4', 'badge-5', 'badge-6'].forEach(id => setBadge(id, 'Locked'));
-      document.getElementById('insp-stage').textContent = 'STAGE: UNMINTED';
-      document.getElementById('insp-owner').textContent = 'Owner: —';
-      renderPresetArt(document.getElementById('preset').value);
-      appendLog('[reset]', 'Session & in-memory settlement ledgers reset.', 'hl');
+    }
+
+    async function restoreSessionOnLoad() {
+      if (location.protocol === 'file:') return;
+      let saved = null;
+      try {
+        saved = JSON.parse(sessionStorage.getItem(STORAGE_KEY) || 'null');
+      } catch (_) {}
+      if (!saved || !saved.sessionId) return;
+
+      try {
+        const s = await api(`/api/demo/session/${encodeURIComponent(saved.sessionId)}`, null, 'GET');
+        S.sessionId = s.session_id;
+        S.mintedPreset = s.preset;
+        S.tokenIndex = s.token_index;
+        S.assetId = s.asset_id;
+        S.assetBase = s.asset_base;
+        S.owner = s.owner;
+        S.hops = s.pcd_steps;
+        S.listingId = s.listing_id;
+        S.crystallized = s.crystallized;
+        S.lastBid = saved.lastBid || null;
+        S.bidRevealed = Boolean(saved.bidRevealed);
+        S.auctionCleared = Boolean(saved.auctionCleared);
+
+        document.getElementById('preset').value = s.preset;
+        document.getElementById('slot-idx').value = s.token_index;
+        renderPresetArt(s.preset);
+
+        setBadge('badge-1', 'Minted (Restored)', 'done');
+        setBadge('badge-2', s.owner === 'alice' ? 'Ready' : `Owner: ${s.owner}`, s.owner === 'alice' ? 'ready' : 'done');
+        if (s.pcd_steps >= 2) {
+          setBadge('badge-3', `${s.pcd_steps} Steps Folded`, 'done');
+          setBadge('badge-4', s.listing_id ? `Listed #${s.listing_id}` : 'Ready', s.listing_id ? 'done' : 'ready');
+        }
+        if (s.listing_id) {
+          setBadge('badge-5', S.auctionCleared ? `Cleared → ${s.owner}` : 'Commit Open', S.auctionCleared ? 'done' : 'ready');
+        }
+        if (S.auctionCleared && !s.crystallized) {
+          setBadge('badge-6', 'Ready', 'ready');
+        }
+        if (s.crystallized) {
+          setBadge('badge-6', 'Crystallized (Sim ZSA)', 'done');
+          document.getElementById('insp-stage').textContent = 'STAGE II: SIMULATED ZSA NOTE';
+        } else {
+          document.getElementById('insp-stage').textContent = 'STAGE I: IN-MEMORY SEAL';
+        }
+        document.getElementById('insp-owner').textContent = `Owner: ${s.owner} (demo key stand-in)`;
+        syncControls();
+        appendLog('[restored]', `Restored active session ${s.session_id} (${s.preset} #${s.token_index}, ${s.pcd_steps} PCD steps).`, 'hl');
+      } catch (_) {
+        sessionStorage.removeItem(STORAGE_KEY);
+      }
     }
 
     async function doMint() {
       const preset = document.getElementById('preset').value;
       const token_index = Number(document.getElementById('slot-idx').value);
-      appendLog('[mint]', `Seeding Ragu MintCircuit & sealing slot #${token_index}...`, 'hl');
-      try {
-        const r = await api('/api/demo/mint', { preset, token_index });
-        S.sessionId = r.session_id;
-        S.mintedPreset = preset;
-        S.assetId = r.asset_id;
-        S.assetBase = r.asset_base;
-        S.owner = 'alice';
-        S.hops = r.pcd_steps;
+      await withBusy('Seeding Ragu MintCircuit + proving 16-bit IssuanceCapCircuit', async () => {
+        try {
+          const r = await api('/api/demo/mint', { preset, token_index });
+          S.sessionId = r.session_id;
+          S.mintedPreset = preset;
+          S.tokenIndex = token_index;
+          S.assetId = r.asset_id;
+          S.assetBase = r.asset_base;
+          S.owner = 'alice';
+          S.hops = r.pcd_steps;
+          saveLocalSession();
 
-        document.getElementById('preset').disabled = true;
-        document.getElementById('slot-idx').disabled = true;
-        document.getElementById('btn-mint').disabled = true;
-        document.getElementById('btn-dup').disabled = false;
+          setBadge('badge-1', 'Minted (Sim Ledger)', 'done');
+          setBadge('badge-2', 'Ready', 'ready');
+          document.getElementById('insp-stage').textContent = 'STAGE I: IN-MEMORY SEAL';
+          document.getElementById('insp-owner').textContent = 'Owner: alice (demo key stand-in)';
 
-        // Unlock Step 2 sequentially + decrypt buttons
-        ['btn-xfer', 'btn-dec-alice', 'btn-dec-bob', 'btn-dec-carol'].forEach(id => {
-          document.getElementById(id).disabled = false;
-        });
-        setBadge('badge-1', 'Minted (Sim Ledger)', 'done');
-        setBadge('badge-2', 'Ready', 'ready');
-
-        document.getElementById('insp-stage').textContent = 'STAGE I: IN-MEMORY SEAL';
-        document.getElementById('insp-owner').textContent = 'Owner: alice (DEK wrapped)';
-
-        renderKv('out-1', [
-          ['AssetId (ZIP 227 [0..32])', r.asset_id],
-          ['AssetBase (Pallas GroupHash)', r.asset_base],
-          ['Mint Nullifiers (3)', `${r.nullifiers[0].slice(0, 20)}… (NF_aid, NF_idx #${token_index}, NF_med)`],
-          ['Ragu Seed Proof', `${r.compressed_proof_bytes} B CompressedProof<Pasta> (step #1)`],
-          ['OOB Envelope URI', r.oob_uri]
-        ]);
-        appendLog('✓ Minted', `slot #${token_index} (${r.compressed_proof_bytes}B Ragu seed proof; simulated seal recorded)`, 'ok');
-      } catch (e) {
-        appendLog('✗ Mint Rejected:', e.message, 'err');
-      }
+          renderKv('out-1', [
+            ['Session ID', r.session_id],
+            ['AssetId (ZIP 227 [0..32])', r.asset_id],
+            ['AssetBase (Pallas GroupHash)', r.asset_base],
+            ['Bound Cap Slot Commitment', `${r.slot_commitment} (IssuanceCapCircuit 1 <= #${token_index} <= 100 ✓)`],
+            ['Mint Nullifiers (3)', `${r.nullifiers[0].slice(0, 20)}… (NF_aid, NF_idx #${token_index}, NF_med)`],
+            ['Ragu Seed Proof', `${r.compressed_proof_bytes} B CompressedProof<Pasta> (step #1)`]
+          ]);
+          appendLog('✓ Minted:', `slot #${token_index} — MintCircuit + IssuanceCapCircuit verified (${r.compressed_proof_bytes} B each).`, 'ok');
+        } catch (e) {
+          appendLog('✗ Mint Rejected:', e.message, 'err');
+        }
+      });
     }
 
     async function doDuplicateAttack() {
       const preset = S.mintedPreset || document.getElementById('preset').value;
       const token_index = Number(document.getElementById('slot-idx').value);
-      try {
-        await api('/api/demo/mint', { preset, token_index });
-      } catch (e) {
-        appendLog('✓ Duplicate Blocked:', e.message, 'ok');
-      }
+      await withBusy('Testing duplicate slot/media nullifier attack', async () => {
+        try {
+          await api('/api/demo/mint', { preset, token_index });
+        } catch (e) {
+          appendLog('✓ Duplicate Blocked:', e.message, 'ok');
+        }
+      });
     }
 
     async function doTransfer() {
-      try {
-        const r = await api('/api/demo/transfer', { session_id: S.sessionId });
-        S.owner = r.owner;
-        renderKv('out-2', [
-          ['Prior Alice Seal', 'Retired in simulated OrchardSealAdapter'],
-          ['New Bob Commitment', r.new_commitment],
-          ['Re-Wrapped OOB URI', r.new_oob_uri]
-        ]);
-        document.getElementById('btn-xfer').disabled = true;
-        setBadge('badge-2', 'Transferred → bob', 'done');
-        document.getElementById('insp-owner').textContent = `Owner: ${r.owner} (DEK wrapped)`;
+      await withBusy('Re-wrapping Pallas ECDH DEK + folding Ragu RoyaltyStep (Alice → Bob)', async () => {
+        try {
+          const r = await api('/api/demo/transfer', { session_id: S.sessionId });
+          S.owner = r.owner;
+          S.hops = r.pcd_steps;
+          saveLocalSession();
 
-        // Sequentially unlock Step 3 (Ragu Fold)
-        ['btn-fold-royalty', 'btn-fold-ticket', 'btn-fold-upgrade'].forEach(id => {
-          document.getElementById(id).disabled = false;
-        });
-        setBadge('badge-3', 'Ready', 'ready');
-
-        appendLog('✓ Transferred:', '32B ChaCha20Poly1305 DEK re-wrapped via Pallas ECDH to bob (try Decrypt as Alice vs Bob).', 'ok');
-      } catch (e) {
-        appendLog('✗ Transfer Error:', e.message, 'err');
-      }
+          renderKv('out-2', [
+            ['Prior Alice Seal', 'Retired in simulated OrchardSealAdapter'],
+            ['New Ledger & PCD Commitment', r.new_commitment],
+            ['Re-Wrapped OOB URI', r.new_oob_uri],
+            ['Folded Ragu Lineage', `Step #${r.pcd_steps} (owner_tag updated to bob; ${r.compressed_proof_bytes} B)`]
+          ]);
+          setBadge('badge-2', 'Transferred → bob', 'done');
+          setBadge('badge-3', `${r.pcd_steps} Steps Folded`, 'ready');
+          setBadge('badge-4', 'Ready', 'ready');
+          document.getElementById('insp-owner').textContent = `Owner: ${r.owner} (demo key stand-in)`;
+          appendLog('✓ Transferred & Folded:', `DEK re-wrapped + RoyaltyStep #${r.pcd_steps} folded to bob.`, 'ok');
+        } catch (e) {
+          appendLog('✗ Transfer Error:', e.message, 'err');
+        }
+      });
     }
 
     async function tryDecrypt(actor) {
@@ -617,30 +853,38 @@
       }
     }
 
-    async function doFold(step_kind, profile_id) {
-      appendLog('… Ragu Fuse:', `Folding ${step_kind} (${profile_id}) via Application::fuse + compress...`, 'hl');
-      try {
-        const r = await api('/api/demo/fold', { session_id: S.sessionId, step_kind, profile_id });
-        S.hops = r.step_count;
-        renderKv('out-3', [
-          ['Recursive Depth', `${r.step_count} steps folded (latest: ${r.last_step} / ${profile_id})`],
-          ['Lineage Accumulator', r.header_hex],
-          ['CompressedProof<Pasta>', `${r.compressed_proof_bytes} B (constant size; verify_compressed = ${r.verify_ms} ms)`]
-        ]);
-        setBadge('badge-3', `${r.step_count} Steps Folded`, 'done');
-
-        // Sequentially unlock Step 4 (OVK + Listing) if not already listed/crystallized
-        if (!S.listingId && !S.crystallized) {
-          ['btn-toggle-ovk', 'reserve-zats', 'btn-list'].forEach(id => {
-            document.getElementById(id).disabled = false;
+    async function doFold(step_kind, profile_id, simulate_unpaid_royalty) {
+      const label = simulate_unpaid_royalty
+        ? 'Testing unpaid RoyaltyStep rejection'
+        : `Fusing Ragu ${step_kind} (${profile_id}) + verify_compressed`;
+      await withBusy(label, async () => {
+        try {
+          const r = await api('/api/demo/fold', {
+            session_id: S.sessionId,
+            step_kind,
+            profile_id,
+            simulate_unpaid_royalty
           });
-          setBadge('badge-4', 'Ready', 'ready');
+          S.hops = r.step_count;
+          saveLocalSession();
+          renderKv('out-3', [
+            ['Verified Header Depth', `${r.step_count} steps (last_step = ${r.last_step}, profile = ${profile_id})`],
+            ['Synced Ledger Commitment', r.latest_commitment_hex],
+            ['Current Owner Tag', r.owner_tag_hex],
+            ['Ticket Event Nullifier', r.event_nullifier_hex],
+            ['CompressedProof<Pasta>', `${r.compressed_proof_bytes} B (verify_compressed = ${r.verify_ms} ms)`]
+          ]);
+          setBadge('badge-3', `${r.step_count} Steps Folded`, 'done');
+          if (!S.listingId) setBadge('badge-4', 'Ready', 'ready');
+          appendLog(`✓ Ragu Fold #${r.step_count}:`, `${step_kind} fused & verified in ${r.verify_ms} ms.`, 'ok');
+        } catch (e) {
+          if (simulate_unpaid_royalty || e.message.includes('replay blocked')) {
+            appendLog('✓ Guard Blocked Invalid Step:', e.message, 'ok');
+          } else {
+            appendLog('✗ Ragu Fold Error:', e.message, 'err');
+          }
         }
-
-        appendLog(`✓ Ragu Fold #${r.step_count}:`, `${step_kind} fused & verified in ${r.verify_ms} ms (${r.compressed_proof_bytes} B CompressedProof)`, 'ok');
-      } catch (e) {
-        appendLog('✗ Ragu Fold Error:', e.message, 'err');
-      }
+      });
     }
 
     async function toggleOvkPreview() {
@@ -654,153 +898,177 @@
           ['Server Summary', r.summary],
           ['Attributes JSON', r.attributes_json]
         ]);
-        appendLog(
-          S.ovkOpen ? '• OVK Disclosed:' : '• OVK Withheld:',
-          `${r.title} — ${r.summary}`,
-          S.ovkOpen ? 'hl' : ''
-        );
+        appendLog(S.ovkOpen ? '• OVK Disclosed:' : '• OVK Withheld:', `${r.title} — ${r.summary}`, S.ovkOpen ? 'hl' : '');
       } catch (e) {
         appendLog('✗ Preview Error:', e.message, 'err');
       }
     }
 
+    async function doProveTrait() {
+      await withBusy('Proving Ragu AttributeCircuit over committed TraitMerkleTree', async () => {
+        try {
+          const r = await api('/api/demo/prove-trait', { session_id: S.sessionId });
+          renderKv('out-4', [
+            ['Disclosed Trait', `${r.trait_key} = "${r.trait_val}"`],
+            ['Committed Traits Merkle Root', r.traits_root_hex],
+            ['Ragu AttributeCircuit Proof', `${r.proof_bytes} B | prove=${r.prove_ms} ms | verify=${r.verify_ms} ms`]
+          ]);
+          appendLog('✓ Trait Proof Verified:', `${r.trait_key}="${r.trait_val}" verified against committed traits_root in ${r.verify_ms} ms.`, 'ok');
+        } catch (e) {
+          appendLog('✗ Trait Proof Error:', e.message, 'err');
+        }
+      });
+    }
+
+    async function doWrongSecretListing() {
+      await withBusy('Generating wrong-secret Ragu OwnershipMerkleCircuit proof to test gallery rejection', async () => {
+        try {
+          await api('/api/demo/list-wrong-secret', { session_id: S.sessionId });
+        } catch (e) {
+          appendLog('✓ Wrong-Secret Ownership Proof Rejected:', e.message, 'ok');
+        }
+      });
+    }
+
     async function doListGallery() {
       const reserve_zatoshis = Number(document.getElementById('reserve-zats').value);
-      appendLog('… Proving Ownership:', 'Running Ragu OwnershipMerkleCircuit (depth-4 Poseidon Merkle + fresh challenge)...', 'hl');
-      try {
-        const r = await api('/api/demo/list', { session_id: S.sessionId, reserve_zatoshis });
-        S.listingId = r.listing_id;
-        renderKv('out-4', [
-          ['Gallery Listing', `#${r.listing_id} (${r.title}) — Poseidon-Merkle Ownership Verified ✓`],
-          ['Collection Merkle Root', r.collection_root_hex],
-          ['Fresh Verifier Challenge', r.challenge_hex],
-          ['Ragu CompressedProof', `${r.proof_bytes} B | prove=${r.prove_ms} ms | verify=${r.verify_ms} ms`]
-        ]);
-        document.getElementById('btn-list').disabled = true;
-        document.getElementById('reserve-zats').disabled = true;
-        setBadge('badge-4', `Listed #${r.listing_id}`, 'done');
-
-        // Sequentially unlock Step 5 (Commit Bid)
-        ['bidder-name', 'bid-zats', 'btn-bid-commit'].forEach(id => {
-          document.getElementById(id).disabled = false;
-        });
-        setBadge('badge-5', 'Commit Open', 'ready');
-
-        appendLog(`✓ Listed #${r.listing_id}:`, `Poseidon-Merkle ownership proof (${r.proof_bytes} B) verified in ${r.verify_ms} ms.`, 'ok');
-      } catch (e) {
-        appendLog('✗ Listing Error:', e.message, 'err');
-      }
+      await withBusy('Verifying lineage + proving Ragu OwnershipMerkleCircuit against server challenge', async () => {
+        try {
+          const r = await api('/api/demo/list', { session_id: S.sessionId, reserve_zatoshis });
+          S.listingId = r.listing_id;
+          saveLocalSession();
+          renderKv('out-4', [
+            ['Gallery Listing', `#${r.listing_id} (${r.title}) — State-Bound Merkle Ownership Verified ✓`],
+            ['Multi-Holder Collection Root', `${r.collection_root_hex} (${r.collection_size} live collection leaves)`],
+            ['Bound NftState Root', r.state_root_hex],
+            ['Consumed Server Challenge', `${r.challenge_hex} (one-time server CSPRNG nonce)`],
+            ['Ragu CompressedProof', `${r.proof_bytes} B | prove=${r.prove_ms} ms | verify=${r.verify_ms} ms`]
+          ]);
+          setBadge('badge-4', `Listed #${r.listing_id}`, 'done');
+          setBadge('badge-5', 'Commit Open', 'ready');
+          appendLog(`✓ Listed #${r.listing_id}:`, `Verified against ${r.collection_size}-leaf collection root & consumed server challenge.`, 'ok');
+        } catch (e) {
+          appendLog('✗ Listing Error:', e.message, 'err');
+        }
+      });
     }
 
     async function doCommitBid() {
       const bidder_id = (document.getElementById('bidder-name').value || 'carol').trim();
       const bid_zatoshis = Number(document.getElementById('bid-zats').value);
-      try {
-        const r = await api('/api/demo/bid-commit', { session_id: S.sessionId, bidder_id, bid_zatoshis });
-        S.lastBid = { bidder_id, bid_zatoshis, salt_hex: r.salt_hex, commitment_hex: r.commitment_hex };
+      await withBusy('Hashing salted bid locally in browser & committing hash', async () => {
+        try {
+          const saltBytes = new Uint8Array(32);
+          window.crypto.getRandomValues(saltBytes);
+          const salt_hex = Array.from(saltBytes, b => b.toString(16).padStart(2, '0')).join('');
+          const commitment_hex = await computeBidCommitmentBrowser(S.listingId, bidder_id, bid_zatoshis, saltBytes);
 
-        // Inspect GET /api/listings to verify bid value is hidden on the wire!
-        const pubRes = await fetch('/api/listings');
-        const pubListings = await pubRes.json();
-        const curListing = pubListings.find(l => l.listing_id === S.listingId);
-        const wireBid = curListing ? curListing.sealed_bids[curListing.sealed_bids.length - 1] : null;
-        const hiddenCheck = wireBid && wireBid.revealed_zatoshis === null ? 'null (hidden on GET /api/listings)' : 'visible';
+          // Server receives ONLY `{ session_id, bidder_id, commitment_hex }` — ZERO bid_zatoshis or salt!
+          const r = await api('/api/demo/bid-commit', { session_id: S.sessionId, bidder_id, commitment_hex });
+          S.lastBid = { bidder_id, bid_zatoshis, salt_hex, commitment_hex };
+          S.bidRevealed = false;
+          saveLocalSession();
 
-        renderKv('out-5', [
-          ['Committed Bidder', r.bidder_id],
-          ['BLAKE2b Commitment', r.commitment_hex],
-          ['Client Secret Salt', r.salt_hex],
-          ['Wire Amount Before Reveal', hiddenCheck]
-        ]);
-        document.getElementById('btn-bid-reveal').disabled = false;
-        setBadge('badge-5', 'Committed (Hidden)', 'ready');
-        appendLog('✓ Bid Committed:', `${bidder_id} committed salted hash; GET /api/listings shows revealed_zatoshis = null.`, 'ok');
-      } catch (e) {
-        appendLog('✗ Commit Error:', e.message, 'err');
-      }
+          // Inspect GET /api/listings (`bids` array) to confirm `revealed_zatoshis === null`!
+          const pubRes = await fetch('/api/listings');
+          const pubListings = await pubRes.json();
+          const curListing = pubListings.find(l => l.listing_id === S.listingId);
+          const wireBids = curListing && Array.isArray(curListing.bids) ? curListing.bids : [];
+          const wireBid = wireBids[wireBids.length - 1] || null;
+          const hiddenCheck = wireBid && wireBid.revealed_zatoshis === null
+            ? 'null (confirmed on GET /api/listings; server never received amount)'
+            : 'unexpected';
+
+          renderKv('out-5', [
+            ['Committed Bidder', r.bidder_id],
+            ['Browser SHA-256 Commitment', r.commitment_hex],
+            ['Browser-Only Secret Salt', `${salt_hex.slice(0, 24)}… (kept in browser until Reveal)`],
+            ['Wire Amount Before Reveal', hiddenCheck]
+          ]);
+          setBadge('badge-5', 'Committed (Hidden)', 'ready');
+          appendLog('✓ Bid Hash Committed:', `${bidder_id} sent only SHA-256 hash; GET /api/listings.bids shows revealed_zatoshis = null.`, 'ok');
+        } catch (e) {
+          appendLog('✗ Commit Error:', e.message, 'err');
+        }
+      });
     }
 
     async function doRevealBid() {
       if (!S.lastBid) return;
-      try {
-        await api('/api/demo/bid-reveal', {
-          session_id: S.sessionId,
-          bidder_id: S.lastBid.bidder_id,
-          bid_zatoshis: S.lastBid.bid_zatoshis,
-          salt_hex: S.lastBid.salt_hex
-        });
-        renderKv('out-5', [
-          ['Revealed Bidder', S.lastBid.bidder_id],
-          ['Verified Bid Amount', `${S.lastBid.bid_zatoshis.toLocaleString()} zatoshis`],
-          ['Commitment Verified', `${S.lastBid.commitment_hex.slice(0, 24)}… ✓`]
-        ]);
-        document.getElementById('btn-bid-reveal').disabled = true;
-        document.getElementById('btn-clear').disabled = false;
-        setBadge('badge-5', 'Revealed', 'ready');
-        appendLog('✓ Bid Revealed:', `${S.lastBid.bidder_id} revealed ${S.lastBid.bid_zatoshis.toLocaleString()} zats matching BLAKE2b commitment.`, 'ok');
-      } catch (e) {
-        appendLog('✗ Reveal Error:', e.message, 'err');
-      }
+      await withBusy('Revealing bid amount & 32B salt to server', async () => {
+        try {
+          await api('/api/demo/bid-reveal', {
+            session_id: S.sessionId,
+            bidder_id: S.lastBid.bidder_id,
+            bid_zatoshis: S.lastBid.bid_zatoshis,
+            salt_hex: S.lastBid.salt_hex
+          });
+          S.bidRevealed = true;
+          saveLocalSession();
+          renderKv('out-5', [
+            ['Revealed Bidder', S.lastBid.bidder_id],
+            ['Verified Bid Amount', `${S.lastBid.bid_zatoshis.toLocaleString()} zatoshis`],
+            ['SHA-256 Preimage Check', `${S.lastBid.commitment_hex.slice(0, 24)}… ✓`]
+          ]);
+          setBadge('badge-5', 'Revealed', 'ready');
+          appendLog('✓ Bid Revealed:', `${S.lastBid.bidder_id} opened ${S.lastBid.bid_zatoshis.toLocaleString()} zats matching browser commitment.`, 'ok');
+        } catch (e) {
+          appendLog('✗ Reveal Error:', e.message, 'err');
+        }
+      });
     }
 
     async function doClear() {
-      try {
-        const r = await api('/api/demo/clear', { session_id: S.sessionId });
-        S.owner = r.winning_bidder;
-        renderKv('out-5', [
-          ['Winning Bidder', r.winning_bidder],
-          ['Clearing Price', `${r.clearing_price_zatoshis.toLocaleString()} zatoshis (simulated ZEC settlement)`],
-          ['Transferred Commitment', r.new_commitment],
-          ['Winner Re-Wrapped OOB', r.new_oob_uri]
-        ]);
-        ['bidder-name', 'bid-zats', 'btn-bid-commit', 'btn-bid-reveal', 'btn-clear'].forEach(id => {
-          document.getElementById(id).disabled = true;
-        });
-        setBadge('badge-5', `Cleared → ${r.winning_bidder}`, 'done');
-        document.getElementById('insp-owner').textContent = `Owner: ${r.winning_bidder} (DEK wrapped)`;
+      await withBusy('Clearing auction + folding Ragu RoyaltyStep & DEK transfer to winner', async () => {
+        try {
+          const r = await api('/api/demo/clear', { session_id: S.sessionId });
+          S.owner = r.winning_bidder;
+          S.hops = r.pcd_steps;
+          S.auctionCleared = true;
+          saveLocalSession();
 
-        // Sequentially unlock Step 6 (Crystallize)
-        document.getElementById('btn-crys').disabled = false;
-        setBadge('badge-6', 'Ready', 'ready');
-
-        appendLog('✓ Auction Cleared & Transferred:', `DEK re-wrapped to ${r.winning_bidder} (try "Decrypt as Carol" in Step 02!).`, 'ok');
-      } catch (e) {
-        appendLog('✗ Clear Error:', e.message, 'err');
-      }
+          renderKv('out-5', [
+            ['Winning Bidder', r.winning_bidder],
+            ['Clearing Price', `${r.clearing_price_zatoshis.toLocaleString()} zatoshis (simulated ZEC settlement)`],
+            ['New Ledger & PCD Commitment', `${r.new_commitment} (folded step #${r.pcd_steps})`],
+            ['Winner Re-Wrapped OOB', r.new_oob_uri]
+          ]);
+          setBadge('badge-5', `Cleared → ${r.winning_bidder}`, 'done');
+          setBadge('badge-6', 'Ready', 'ready');
+          document.getElementById('insp-owner').textContent = `Owner: ${r.winning_bidder} (demo key stand-in)`;
+          appendLog('✓ Auction Cleared & Folded:', `Ownership & DEK folded to ${r.winning_bidder} (step #${r.pcd_steps}; try "Decrypt as Carol"!).`, 'ok');
+        } catch (e) {
+          appendLog('✗ Clear Error:', e.message, 'err');
+        }
+      });
     }
 
     async function doCrystallize() {
-      appendLog('… Crystallizing:', 'Proving Ragu MigrationCircuit + signing 2-of-3 Pallas Schnorr ZSA issuance...', 'hl');
-      try {
-        const r = await api('/api/demo/crystallize', { session_id: S.sessionId });
-        S.crystallized = true;
-        renderKv('out-6', [
-          ['Stage II Settlement', `Simulated OrchardZSA Note (value = ${r.value}, finalized = ${r.finalized})`],
-          ['Preserved AssetId', r.asset_id],
-          ['Preserved AssetBase', r.asset_base],
-          ['Threshold Issuer Auth', r.frost_signers],
-          ['Simulated ZSA TxId', r.zsa_txid]
-        ]);
-
-        // Lock ALL Stage I mutation controls permanently after crystallization!
-        [
-          'btn-dup', 'btn-xfer',
-          'btn-fold-royalty', 'btn-fold-ticket', 'btn-fold-upgrade',
-          'reserve-zats', 'btn-list',
-          'bidder-name', 'bid-zats', 'btn-bid-commit', 'btn-bid-reveal', 'btn-clear',
-          'btn-crys'
-        ].forEach(id => { document.getElementById(id).disabled = true; });
-
-        setBadge('badge-6', 'Crystallized (Sim ZSA)', 'done');
-        document.getElementById('insp-stage').textContent = 'STAGE II: SIMULATED ZSA NOTE';
-        appendLog('✓ Crystallized:', 'Stage I seal retired & locked; Stage II ZSA note minted with identical AssetId.', 'ok');
-      } catch (e) {
-        appendLog('✗ Crystallize Error:', e.message, 'err');
-      }
+      await withBusy('Verifying lineage + proving owner-bound Ragu MigrationCircuit + 2-of-3 Schnorr', async () => {
+        try {
+          const r = await api('/api/demo/crystallize', { session_id: S.sessionId });
+          S.crystallized = true;
+          saveLocalSession();
+          renderKv('out-6', [
+            ['Stage II Settlement', `Simulated OrchardZSA Note (value = ${r.value}, finalized = ${r.finalized})`],
+            ['Preserved AssetId', r.asset_id],
+            ['Owner-Bound Burn Nullifier', r.burn_nullifier],
+            ['Threshold Issuer Auth', r.frost_signers],
+            ['Simulated ZSA TxId', r.zsa_txid]
+          ]);
+          setBadge('badge-6', 'Crystallized (Sim ZSA)', 'done');
+          document.getElementById('insp-stage').textContent = 'STAGE II: SIMULATED ZSA NOTE';
+          appendLog('✓ Crystallized:', 'Lineage + MigrationCircuit verified; Stage I seal retired & locked.', 'ok');
+        } catch (e) {
+          appendLog('✗ Crystallize Error:', e.message, 'err');
+        }
+      });
     }
 
     renderPresetArt(document.getElementById('preset').value);
+    syncControls();
     appendLog('[zyoza-studio]', 'Ready. Select a Nounz or Lootz specimen and click Mint.', 'hl');
+    restoreSessionOnLoad();
   </script>
 </body>
 </html>

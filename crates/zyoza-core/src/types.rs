@@ -186,21 +186,23 @@ pub type ProofBytes = Vec<u8>;
 /// Request to prove ownership of an unspent Zyoza object in a Merkle collection tree.
 ///
 /// The prover proves in zero knowledge that:
-/// 1. `owner_tag = H(secret_witness)`
-/// 2. `leaf = H(asset_id, owner_tag)` sits in `collection_root` via `merkle_siblings`
-/// 3. The proof is bound to the verifier's fresh `challenge`.
+/// 1. `owner_tag = Poseidon(secret_witness)`
+/// 2. `leaf = Poseidon(Poseidon(asset_id, state_root), owner_tag)` sits in `collection_root` via `merkle_siblings`
+/// 3. The proof is bound to `(collection_root, state_root, challenge)`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OwnershipProofRequest {
     pub asset_id: AssetId,
+    pub state_root: [u8; 32],
     pub collection_root: [u8; 32],
     pub merkle_siblings: Vec<([u8; 32], bool)>,
     pub secret_witness: Vec<u8>,
     pub challenge: [u8; 32],
 }
 
-/// Public inputs required to verify an ownership proof.
+/// Public inputs required to verify an ownership proof bound to a specific object `state_root`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OwnershipVerifyRequest {
     pub collection_root: [u8; 32],
+    pub state_root: [u8; 32],
     pub challenge: [u8; 32],
 }

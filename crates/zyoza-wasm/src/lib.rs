@@ -40,11 +40,17 @@ pub fn parse_memo_seal(memo_bytes: &[u8]) -> Result<String, JsValue> {
 #[wasm_bindgen]
 pub fn verify_ownership_proof(
     collection_root_hex: &str,
+    state_root_hex: &str,
     challenge_hex: &str,
     proof_bytes: &[u8],
 ) -> Result<bool, JsValue> {
-    verify_ownership_proof_hex(collection_root_hex, challenge_hex, proof_bytes)
-        .map_err(|e| JsValue::from_str(&e.to_string()))
+    verify_ownership_proof_hex(
+        collection_root_hex,
+        state_root_hex,
+        challenge_hex,
+        proof_bytes,
+    )
+    .map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
 fn parse_32(s: &str) -> Result<[u8; 32], JsValue> {

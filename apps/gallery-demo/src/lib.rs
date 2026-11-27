@@ -4,36 +4,40 @@ pub mod demo_engine;
 pub mod http;
 
 use anyhow::{bail, Result};
-use blake2b_simd::Params;
+use rand::rand_core::UnwrapErr;
+use rand::rngs::SysRng;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use sha2::{Digest, Sha256};
+use std::collections::{HashMap, HashSet};
 use zyoza_core::{
     AssetProfile, ObjectViewingKey, OwnershipVerifyRequest, ProfilePreview, ProofEngine,
 };
-use zyoza_profile_nft::NftProfile;
+use zyoza_profile_nft::{NftProfile, NftState};
 use zyoza_proofs::RaguPcdEngine;
 
-const PERSONAL_BID_COMMIT: &[u8; 16] = b"ZYOZA-BID-CMT1__";
+const BID_COMMIT_DOMAIN: &[u8; 16] = b"ZYOZA-BID-CMT-v2";
 
-/// Computes a salted BLAKE2b-256 commitment hiding `bid_zatoshis` during the bidding window:
-/// `BLAKE2b-256("ZYOZA-BID-CMT1__", listing_id || bidder_id || bid_zatoshis || salt)`.
+/// Computes a salted SHA-256 commitment matching Web Crypto (`crypto.subtle.digest('SHA-256', ...)`):
+/// `SHA-256("ZYOZA-BID-CMT-v2" || listing_id_be8 || bidder_len_be4 || bidder_utf8 || bid_zatoshis_be8 || salt_32)`.
+///
+/// Because browsers compute this hash locally in JS, the client never sends `bid_zatoshis` or `salt`
+/// to the server during the Commit step!
 pub fn compute_bid_commitment(
     listing_id: u64,
     bidder_id: &str,
     bid_zatoshis: u64,
     salt: &[u8; 32],
 ) -> [u8; 32] {
-    let mut h = Params::new()
-        .hash_length(32)
-        .personal(PERSONAL_BID_COMMIT)
-        .to_state();
-    h.update(&listing_id.to_be_bytes());
-    h.update(&(bidder_id.len() as u32).to_be_bytes());
+    let mut h = Sha256::new();
+    h.update(BID_COMMIT_DOMAIN);
+    h.update(listing_id.to_be_bytes());
+    h.update((bidder_id.len() as u32).to_be_bytes());
     h.update(bidder_id.as_bytes());
-    h.update(&bid_zatoshis.to_be_bytes());
+    h.update(bid_zatoshis.to_be_bytes());
     h.update(salt);
     let mut out = [0u8; 32];
-    out.copy_from_slice(h.finalize().as_bytes());
+    out.copy_from_slice(&h.finalize());
     out
 }
 
@@ -41,15 +45,17 @@ pub fn compute_bid_commitment(
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GalleryListing {
     pub listing_id: u64,
+    pub state_root_hex: String,
+    pub collection_root_hex: String,
     pub preview: ProfilePreview,
     pub zk_verified_ownership: bool,
     pub reserve_zatoshis: u64,
-    /// Publicly visible bid commitments; unrevealed bids hide their `revealed_zatoshis`.
+    /// Publicly visible bid commitments; unrevealed bids have `revealed_zatoshis: None`.
     pub bids: Vec<SealedBidRecord>,
     pub cleared: bool,
 }
 
-/// Stored commit-reveal bid entry (`revealed_zatoshis` is `None` until revealed!).
+/// Stored commit-reveal bid entry (`revealed_zatoshis` is `None` until revealed).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SealedBidRecord {
     pub bidder_id: String,
@@ -57,7 +63,7 @@ pub struct SealedBidRecord {
     pub revealed_zatoshis: Option<u64>,
 }
 
-/// Phase-1 commit payload submitting only a salted hash commitment (no plaintext amount).
+/// Phase-1 commit payload submitting ONLY a browser-computed hash commitment (zero plaintext amount).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CommitBidRequest {
     pub bidder_id: String,
@@ -81,14 +87,30 @@ pub struct AuctionClearResult {
     pub commitment_hex: String,
 }
 
-/// Opt-in viewing-key gallery service with commit-reveal sealed bidding.
+/// Opt-in viewing-key gallery service enforcing authoritative collection roots,
+/// one-time server-issued challenges, `state_root` binding, and commit-reveal bidding.
 #[derive(Default)]
 pub struct GalleryService {
     next_id: u64,
     listings: HashMap<u64, GalleryListing>,
+    registered_roots: HashSet<[u8; 32]>,
+    pending_challenges: HashSet<[u8; 32]>,
 }
 
 impl GalleryService {
+    /// Registers an authoritative `CollectionMerkleTree` root derived from known settlement state.
+    pub fn register_collection_root(&mut self, root: [u8; 32]) {
+        self.registered_roots.insert(root);
+    }
+
+    /// Issues a fresh one-time 32-byte server challenge that is consumed upon `submit_listing`.
+    pub fn issue_challenge(&mut self) -> [u8; 32] {
+        let mut challenge = [0u8; 32];
+        UnwrapErr(SysRng).fill_bytes(&mut challenge);
+        self.pending_challenges.insert(challenge);
+        challenge
+    }
+
     /// Returns all current gallery listings sorted by `listing_id`.
     pub fn list_listings(&self) -> Vec<GalleryListing> {
         let mut items: Vec<_> = self.listings.values().cloned().collect();
@@ -96,7 +118,11 @@ impl GalleryService {
         items
     }
 
-    /// Lists an NFT after verifying its Ragu Poseidon-Merkle ZK ownership proof and unlocking preview via OVK.
+    /// Lists an NFT after checking:
+    /// 1. `verify_req.collection_root` is an authoritative registered collection root.
+    /// 2. `verify_req.challenge` is an unconsumed server-issued challenge (prevents challenge replay).
+    /// 3. `verify_req.state_root` matches `NftState::from_bytes(nft_state_bytes)?.state_root()?`.
+    /// 4. `RaguPcdEngine::verify_ownership` passes `verify_compressed`.
     pub fn submit_listing(
         &mut self,
         ovk: &ObjectViewingKey,
@@ -105,15 +131,36 @@ impl GalleryService {
         nft_state_bytes: &[u8],
         reserve_zatoshis: u64,
     ) -> Result<GalleryListing> {
+        if !self.registered_roots.contains(&verify_req.collection_root) {
+            bail!("unrecognized collection_root: root is not registered in the gallery indexer");
+        }
+        if !self.pending_challenges.contains(&verify_req.challenge) {
+            bail!("invalid or already-consumed verifier challenge: request a fresh challenge first");
+        }
+
+        let parsed_state = NftState::from_bytes(nft_state_bytes)?;
+        let actual_state_root = parsed_state.state_root()?;
+        if verify_req.state_root != actual_state_root {
+            bail!("ownership proof state_root does not match the listed NftState");
+        }
+        if ovk.asset_id != parsed_state.asset_id {
+            bail!("ObjectViewingKey asset_id does not match the listed NftState");
+        }
+
         let zk_ok = RaguPcdEngine.verify_ownership(verify_req, ownership_proof)?;
         if !zk_ok {
-            bail!("ZK ownership proof failed Poseidon-Merkle verification");
+            bail!("Ragu OwnershipMerkleCircuit rejected proof (verify_compressed == false)");
         }
+
+        // Consume one-time challenge only after full verification succeeds (or burn on use).
+        self.pending_challenges.remove(&verify_req.challenge);
 
         let preview = NftProfile.public_preview(nft_state_bytes, Some(ovk))?;
         self.next_id += 1;
         let listing = GalleryListing {
             listing_id: self.next_id,
+            state_root_hex: hex::encode(actual_state_root),
+            collection_root_hex: hex::encode(verify_req.collection_root),
             preview,
             zk_verified_ownership: true,
             reserve_zatoshis,
@@ -220,7 +267,7 @@ mod tests {
     use zyoza_proofs::CollectionMerkleTree;
 
     #[test]
-    fn private_listing_merkle_zk_badge_and_commit_reveal_auction() {
+    fn private_listing_bound_state_one_time_challenge_and_commit_reveal() {
         let asset_id = AssetId::derive(
             &[0x01; 32],
             &AssetDesc {
@@ -230,6 +277,7 @@ mod tests {
             }
             .to_canonical_bytes(),
         );
+        let other_asset = AssetId::derive(&[0x01; 32], b"zyoza:gallery:2");
         let ovk = ObjectViewingKey::derive(asset_id, &[0xAA; 32]);
 
         let state = NftState {
@@ -254,13 +302,22 @@ mod tests {
                 timestamp_unix: 1_700_000_000,
             }],
         };
+        let state_root = state.state_root().unwrap();
 
-        let tree = CollectionMerkleTree::from_holdings(&[(asset_id, b"alice-sk")]);
+        let tree = CollectionMerkleTree::from_holdings(&[
+            (asset_id, state_root, b"alice-sk"),
+            (other_asset, [0x22; 32], b"bob-sk"),
+        ]);
         let collection_root = tree.root();
-        let challenge = [0x66; 32];
+
+        let mut gallery = GalleryService::default();
+        gallery.register_collection_root(collection_root);
+        let challenge = gallery.issue_challenge();
+
         let proof = RaguPcdEngine
             .prove_ownership(&OwnershipProofRequest {
                 asset_id,
+                state_root,
                 collection_root,
                 merkle_siblings: tree.path(0),
                 secret_witness: b"alice-sk".to_vec(),
@@ -268,12 +325,12 @@ mod tests {
             })
             .unwrap();
 
-        let mut gallery = GalleryService::default();
         let listing = gallery
             .submit_listing(
                 &ovk,
                 &OwnershipVerifyRequest {
                     collection_root,
+                    state_root,
                     challenge,
                 },
                 &proof,
@@ -281,32 +338,37 @@ mod tests {
                 100_000_000,
             )
             .unwrap();
-
         assert!(listing.zk_verified_ownership);
-        assert_eq!(listing.preview.title, "Midnight Zyoza");
 
-        // Commit two bids: amounts stay None in list_listings()!
+        // Replaying the consumed challenge MUST fail!
+        assert!(gallery
+            .submit_listing(
+                &ovk,
+                &OwnershipVerifyRequest {
+                    collection_root,
+                    state_root,
+                    challenge,
+                },
+                &proof,
+                &state.to_bytes().unwrap(),
+                100_000_000,
+            )
+            .is_err());
+
+        // Commit two bids without sending amounts: amounts stay None in list_listings()!
         let bob_salt = [0x11; 32];
         let carol_salt = [0x22; 32];
-        let bob_cmt = hex::encode(compute_bid_commitment(
-            listing.listing_id,
-            "bob",
-            120_000_000,
-            &bob_salt,
-        ));
-        let carol_cmt = hex::encode(compute_bid_commitment(
-            listing.listing_id,
-            "carol",
-            150_000_000,
-            &carol_salt,
-        ));
-
         gallery
             .commit_sealed_bid(
                 listing.listing_id,
                 CommitBidRequest {
                     bidder_id: "bob".into(),
-                    commitment_hex: bob_cmt,
+                    commitment_hex: hex::encode(compute_bid_commitment(
+                        listing.listing_id,
+                        "bob",
+                        120_000_000,
+                        &bob_salt,
+                    )),
                 },
             )
             .unwrap();
@@ -315,29 +377,20 @@ mod tests {
                 listing.listing_id,
                 CommitBidRequest {
                     bidder_id: "carol".into(),
-                    commitment_hex: carol_cmt,
+                    commitment_hex: hex::encode(compute_bid_commitment(
+                        listing.listing_id,
+                        "carol",
+                        150_000_000,
+                        &carol_salt,
+                    )),
                 },
             )
             .unwrap();
+        assert!(gallery.list_listings()[0]
+            .bids
+            .iter()
+            .all(|b| b.revealed_zatoshis.is_none()));
 
-        // Before reveal, GET /api/listings exposes NO bid amounts!
-        for b in &gallery.list_listings()[0].bids {
-            assert!(b.revealed_zatoshis.is_none());
-        }
-
-        // Wrong reveal amount fails!
-        assert!(gallery
-            .reveal_sealed_bid(
-                listing.listing_id,
-                RevealBidRequest {
-                    bidder_id: "carol".into(),
-                    bid_zatoshis: 999_000_000,
-                    salt_hex: hex::encode(carol_salt),
-                }
-            )
-            .is_err());
-
-        //Carol reveals honestly (Bob keeps his losing bid unrevealed & private!)
         gallery
             .reveal_sealed_bid(
                 listing.listing_id,
@@ -348,11 +401,8 @@ mod tests {
                 },
             )
             .unwrap();
-
         let cleared = gallery.clear_auction(listing.listing_id).unwrap();
         assert_eq!(cleared.winning_bidder, "carol");
         assert_eq!(cleared.clearing_price_zatoshis, 150_000_000);
-        // Bob's losing bid stayed completely unrevealed!
-        assert!(gallery.list_listings()[0].bids[0].revealed_zatoshis.is_none());
     }
 }

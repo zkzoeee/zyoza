@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="description" content="Zyoza is a proof-carrying shielded state object protocol for Zcash — mint, transfer, selectively disclose, and trade private NFTs, tickets, and credentials using Ragu recursive PCD and Pallas ECDH." />
   <meta property="og:title" content="Zyoza — Proof-Carrying Shielded Objects on Zcash" />
-  <meta property="og:description" content="Mint, trade, and prove ownership of private NFTs, event tickets, and credentials on Zcash without exposing your wallet or past owners." />
+  <meta property="og:description" content="Mint, trade, and prove ownership of private NFTs, event tickets, and credentials on Zcash without exposing your wallet." />
   <meta property="og:type" content="website" />
   <meta property="og:image" content="/logo.png" />
   <meta name="twitter:card" content="summary" />
@@ -42,7 +42,6 @@
     .wrap { max-width: 1000px; margin: 0 auto; padding: 0 2rem; }
     @media (max-width: 560px) { .wrap { padding: 0 1.1rem; } }
 
-    /* Prototype Honesty Banner */
     .proto-banner {
       background: #EFE9DA;
       border-bottom: 1px solid var(--line);
@@ -55,25 +54,24 @@
     .proto-banner strong { color: var(--accent); }
     .proto-banner a { border-bottom: 1px solid var(--ink); }
 
-    /* Top Nav */
     header { border-bottom: 1px solid var(--line); padding: 1.15rem 0; background: var(--card); }
     .nav { display: flex; align-items: center; justify-content: space-between; gap: 0.85rem; flex-wrap: wrap; }
     .brand { display: flex; align-items: center; gap: 0.65rem; font-family: var(--serif); font-size: 1.22rem; font-weight: 600; letter-spacing: 0.02em; }
     .brand img { width: 36px; height: 36px; border-radius: 6px; object-fit: cover; border: 1px solid var(--line); }
-    .nav-links { display: flex; gap: 1.35rem; font-size: 0.88rem; color: var(--muted); align-items: center; flex-wrap: wrap; }
+    .nav-links { display: flex; gap: 1.25rem; font-size: 0.88rem; color: var(--muted); align-items: center; flex-wrap: wrap; }
     @media (max-width: 560px) {
-      .nav-links { gap: 0.85rem; font-size: 0.82rem; width: 100%; justify-content: space-between; }
+      .nav-links { gap: 0.75rem; font-size: 0.81rem; width: 100%; justify-content: space-between; }
     }
     .nav-links a:hover { color: var(--ink); }
     .nav-cta { color: var(--ink) !important; border-bottom: 1px solid var(--accent); padding-bottom: 2px; font-weight: 500; }
 
     /* Hero */
-    .hero { display: grid; grid-template-columns: 1.28fr 0.92fr; gap: 3rem; padding: 4.5rem 0 3.75rem; border-bottom: 1px solid var(--line); align-items: center; }
+    .hero { display: grid; grid-template-columns: 1.28fr 0.92fr; gap: 3rem; padding: 4.25rem 0 3.5rem; border-bottom: 1px solid var(--line); align-items: center; }
     @media (max-width: 800px) { .hero { grid-template-columns: 1fr; padding: 2.75rem 0; gap: 2rem; } }
     .kicker { font-family: var(--mono); font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.14em; color: var(--accent); margin-bottom: 0.85rem; }
     h1 { font-family: var(--serif); font-weight: 600; font-size: clamp(2.1rem, 4vw, 3.15rem); line-height: 1.15; letter-spacing: -0.01em; margin-bottom: 1.1rem; }
     .lead-plain { color: var(--ink); font-size: 1.06rem; max-width: 52ch; margin-bottom: 0.75rem; font-weight: 450; }
-    .subtitle { color: var(--muted); font-size: 0.95rem; max-width: 54ch; margin-bottom: 1.85rem; }
+    .subtitle { color: var(--muted); font-size: 0.94rem; max-width: 54ch; margin-bottom: 1.85rem; }
     .btn-row { display: flex; flex-wrap: wrap; gap: 0.85rem; align-items: center; }
     .btn { display: inline-block; padding: 0.74rem 1.35rem; font-size: 0.9rem; font-weight: 500; border: 1px solid var(--ink); transition: all 0.15s ease; cursor: pointer; }
     .btn-primary { background: var(--ink); color: var(--paper); }
@@ -100,45 +98,50 @@
     }
     @media (max-width: 760px) { .metrics { grid-template-columns: repeat(2, 1fr); } }
     @media (max-width: 420px) { .metrics { grid-template-columns: 1fr; } }
-    .metric { padding: 1.25rem 1.35rem; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-    .metric strong { display: block; font-family: var(--serif); font-size: 1.4rem; color: var(--ink); margin-bottom: 0.15rem; }
-    .metric span { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); display: block; }
+    .metric { padding: 1.2rem 1.3rem; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+    .metric strong { display: block; font-family: var(--serif); font-size: 1.35rem; color: var(--ink); margin-bottom: 0.15rem; }
+    .metric span { font-family: var(--mono); font-size: 0.71rem; color: var(--muted); display: block; }
 
     /* Sections */
-    .section { padding: 3.75rem 0; border-bottom: 1px solid var(--line); }
-    .section-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2rem; gap: 0.75rem; flex-wrap: wrap; }
+    .section { padding: 3.6rem 0; border-bottom: 1px solid var(--line); }
+    .section-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 1.85rem; gap: 0.75rem; flex-wrap: wrap; }
     h2 { font-family: var(--serif); font-weight: 600; font-size: 1.6rem; }
     .section-note { font-family: var(--mono); font-size: 0.75rem; color: var(--muted); }
+
+    /* Plain-English 3-Step Flow */
+    .how-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+    @media (max-width: 780px) { .how-grid { grid-template-columns: 1fr; } }
+    .how-card { background: var(--card); border: 1px solid var(--line); padding: 1.45rem; }
+    .how-num { font-family: var(--mono); font-size: 0.74rem; color: var(--accent); margin-bottom: 0.45rem; display: block; }
+    .how-card h3 { font-family: var(--serif); font-size: 1.12rem; margin-bottom: 0.45rem; }
+    .how-card p { font-size: 0.9rem; color: var(--muted); }
 
     /* 4 Pillars Grid */
     .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); border-top: 1px solid var(--line); border-left: 1px solid var(--line); background: var(--card); }
     @media (max-width: 700px) { .grid-2 { grid-template-columns: 1fr; } }
-    .cell { padding: 1.75rem; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+    .cell { padding: 1.7rem; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
     .cell-top { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; margin-bottom: 0.55rem; flex-wrap: wrap; }
-    .step-idx { font-family: var(--mono); color: var(--accent); font-size: 0.76rem; letter-spacing: 0.08em; }
-    .status-pill { font-family: var(--mono); font-size: 0.67rem; padding: 2px 7px; border: 1px solid var(--line); }
+    .step-idx { font-family: var(--mono); color: var(--accent); font-size: 0.75rem; letter-spacing: 0.08em; }
+    .status-pill { font-family: var(--mono); font-size: 0.66rem; padding: 2px 7px; border: 1px solid var(--line); }
     .st-impl { border-color: var(--pine); color: var(--pine); background: #E9F3EE; }
     .st-sim { border-color: var(--amber); color: var(--amber); background: #FBF4E4; }
-    .cell h3 { font-family: var(--serif); font-weight: 600; font-size: 1.14rem; margin-bottom: 0.45rem; }
-    .cell p { font-size: 0.91rem; color: var(--muted); }
+    .cell h3 { font-family: var(--serif); font-weight: 600; font-size: 1.13rem; margin-bottom: 0.45rem; }
+    .cell p { font-size: 0.9rem; color: var(--muted); }
     code { font-family: var(--mono); font-size: 0.84em; background: var(--paper-alt); padding: 0.1rem 0.3rem; border: 1px solid var(--line); color: var(--ink); }
 
-    /* Responsive Table Wrapper */
     .table-scroll { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--line); background: var(--card); }
-    table { width: 100%; min-width: 580px; border-collapse: collapse; font-size: 0.89rem; }
+    table { width: 100%; min-width: 600px; border-collapse: collapse; font-size: 0.88rem; }
     th, td { text-align: left; padding: 0.78rem 0.9rem; border-bottom: 1px solid var(--line); }
     tr:last-child td { border-bottom: none; }
     th { font-family: var(--mono); font-size: 0.71rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); background: var(--paper-alt); font-weight: 500; }
-    td.mono { font-family: var(--mono); font-size: 0.81rem; }
+    td.mono { font-family: var(--mono); font-size: 0.8rem; }
 
-    /* Verticals Strip */
     .profiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); gap: 0.75rem; }
     .profile-box { background: var(--card); border: 1px solid var(--line); padding: 1.1rem; }
     .profile-tag { font-family: var(--mono); font-size: 0.74rem; color: var(--accent); margin-bottom: 0.25rem; display: block; }
     .profile-box strong { display: block; font-family: var(--serif); font-weight: 600; margin-bottom: 0.25rem; }
     .profile-box span { font-size: 0.82rem; color: var(--muted); }
 
-    /* Quickstart Box */
     .quickstart { background: var(--card); border: 1px solid var(--line); padding: 1.5rem; display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 1.5rem; align-items: center; }
     @media (max-width: 760px) { .quickstart { grid-template-columns: 1fr; } }
     pre.cmd { background: #151619; color: #ECEFF4; font-family: var(--mono); font-size: 0.78rem; padding: 1rem; overflow-x: auto; line-height: 1.6; }
@@ -153,7 +156,7 @@
 </head>
 <body>
   <div class="proto-banner">
-    <strong>Research Prototype:</strong> Real <code>tachyon-zcash/ragu</code> recursive PCD &amp; Pallas ECDH crypto over a simulated in-memory ledger. Not audited — see <a href="/security">Security &amp; Benchmarks</a>.
+    <strong>Research Prototype:</strong> Real <code>tachyon-zcash/ragu</code> recursive PCD &amp; Pallas ECDH crypto over a simulated in-memory ledger. Not audited — see <a href="/whitepaper">Whitepaper</a> &amp; <a href="/security">Security</a>.
   </div>
 
   <header>
@@ -163,9 +166,9 @@
         <span>Zyoza</span>
       </a>
       <nav class="nav-links" aria-label="Primary">
+        <a href="#how-it-works">How It Works</a>
         <a href="#architecture">Architecture</a>
-        <a href="#comparison">Why PCD</a>
-        <a href="#profiles">Profiles</a>
+        <a href="#comparison">Tradeoffs</a>
         <a href="/whitepaper">Whitepaper</a>
         <a href="/spec">Spec</a>
         <a href="/demo" class="nav-cta">Zyoza Studio →</a>
@@ -179,10 +182,10 @@
         <div class="kicker">Zcash · Ragu Recursive PCD · ZIP 227 / 302</div>
         <h1>Wrapped in secrecy.<br/>Folded in proof.</h1>
         <p class="lead-plain">
-          Built for creators, collectors, and communities to mint, trade, and prove ownership of NFTs, event tickets, and credentials on Zcash—without exposing their wallet or past owners.
+          Built for creators, collectors, and communities to mint, trade, and prove ownership of NFTs, event tickets, and credentials on Zcash—without exposing their wallet.
         </p>
         <p class="subtitle">
-          Encrypted media stays off-chain, multi-hop rules fold recursively via <strong>tachyon-zcash/ragu</strong> into one constant-size proof, and ZIP 227 asset identities bridge single-use seals to native Zcash Shielded Assets.
+          Encrypted media stays off-chain, transition rules fold recursively via <strong>tachyon-zcash/ragu</strong> into one constant-size <code>7,168 B</code> proof, and ZIP 227 asset digests prepare objects for native Zcash Shielded Assets.
         </p>
         <div class="btn-row">
           <a href="/demo" class="btn btn-primary">Open Zyoza Studio</a>
@@ -218,32 +221,56 @@
         <span>Constant Ragu CompressedProof&lt;Pasta&gt;</span>
       </div>
       <div class="metric">
-        <strong>371 ms</strong>
-        <span>O(1) verify_compressed (2.15 s fold, M2 Pro)</span>
+        <strong>~2.2–5.0 s</strong>
+        <span>Warm Ragu prove / fold (multicore)</span>
       </div>
       <div class="metric">
-        <strong>512 B</strong>
-        <span>ZIP 302 0xFF binary memo seal</span>
+        <strong>~0.38–0.60 s</strong>
+        <span>O(1) verify_compressed</span>
       </div>
       <div class="metric">
-        <strong>32 B DEK</strong>
-        <span>Pallas ECDH re-wrap (zero re-upload)</span>
+        <strong>512 B / 32 B</strong>
+        <span>ZIP 302 seal / ECDH DEK re-wrap</span>
+      </div>
+    </section>
+
+    <section id="how-it-works" class="section">
+      <div class="section-head">
+        <h2>How Zyoza Works in Three Steps</h2>
+        <span class="section-note">Plain-English Overview</span>
+      </div>
+      <div class="how-grid">
+        <div class="how-card">
+          <span class="how-num">STEP 01 · SEAL &amp; MINT</span>
+          <h3>Encrypt Once, Anchor a 512-Byte Seal</h3>
+          <p>Artwork and metadata are encrypted off-chain so they never bloat Zcash. Only a compact 512-byte cryptographic seal and deterministic anti-duplicate tags are anchored to the ledger.</p>
+        </div>
+        <div class="how-card">
+          <span class="how-num">STEP 02 · TRADE &amp; FOLD</span>
+          <h3>Pass a 32-Byte Key &amp; Fold the Proof</h3>
+          <p>When an item changes hands, the seller re-wraps only the 32-byte decryption key to the buyer's public key and folds one Ragu proof step—never re-uploading media.</p>
+        </div>
+        <div class="how-card">
+          <span class="how-num">STEP 03 · PROVE OR UPGRADE</span>
+          <h3>Show One Item, Keep Your Wallet Dark</h3>
+          <p>Collectors reveal a single item to a gallery or ticket gate using a per-object viewing key + zero-knowledge Merkle proof, or burn the seal 1:1 into a native ZSA token.</p>
+        </div>
       </div>
     </section>
 
     <section id="architecture" class="section">
       <div class="section-head">
         <h2>Four Architectural Folds</h2>
-        <span class="section-note">Explicit Implementation Status · 13-Crate Rust Workspace</span>
+        <span class="section-note">Explicit Circuit Bindings &amp; Current Prototype Limits</span>
       </div>
       <div class="grid-2">
         <div class="cell">
           <div class="cell-top">
             <span class="step-idx">01 · IDENTITY &amp; SCARCITY</span>
-            <span class="status-pill st-impl">Implemented</span>
+            <span class="status-pill st-impl">Implemented (Stage I Indexed)</span>
           </div>
-          <h3>ZIP 227 AssetDigest &amp; Ragu Supply Caps</h3>
-          <p>Derives canonical 64-byte <code>BLAKE2b-512("ZSA-Asset-Digest")</code> and Pallas <code>GroupHash("z.cash:OrchardZSA")</code> from genesis. Deterministic mint nullifiers (<code>NF_aid</code>, <code>NF_idx</code>, <code>NF_med</code>) + Ragu 16-bit range proofs (<code>enforce_le::&lt;16&gt;</code>) enforce capped drops.</p>
+          <h3>ZIP 227 AssetDigest &amp; Bound Range Proofs</h3>
+          <p>Derives 64-byte <code>BLAKE2b-512("ZSA-Asset-Digest")</code> + Pallas <code>AssetBase</code>. Ragu's <code>IssuanceCapCircuit</code> binds <code>1 &le; slot &le; cap</code> to <code>(collection_id, asset_id)</code>; global uniqueness relies on a public Stage I nullifier log until Stage II ZSA consensus.</p>
         </div>
         <div class="cell">
           <div class="cell-top">
@@ -251,15 +278,15 @@
             <span class="status-pill st-impl">Implemented (PQ: Design Target)</span>
           </div>
           <h3>O(1) Pallas ECDH Key Handover</h3>
-          <p>Payloads encrypt once under <code>ChaCha20Poly1305</code>. Transfers re-wrap only the 32-byte DEK via ephemeral Pallas ECDH + <code>HKDF-SHA256</code>—moving large artworks with zero re-upload. <em>(Hybrid ML-KEM-768 encapsulation is a planned design target.)</em></p>
+          <p>Payloads encrypt once under <code>ChaCha20Poly1305</code>. Transfers re-wrap only the 32-byte DEK via fresh OS-random ephemeral Pallas ECDH + <code>HKDF-SHA256</code>. <em>(Hybrid ML-KEM-768 encapsulation is a future design target.)</em></p>
         </div>
         <div class="cell">
           <div class="cell-top">
             <span class="step-idx">03 · RECURSIVE LINEAGE</span>
-            <span class="status-pill st-impl">Implemented</span>
+            <span class="status-pill st-impl">Implemented (See Ragu Caveat)</span>
           </div>
           <h3>Ragu Non-Uniform Recursive PCD</h3>
-          <p>Integrates <code>tachyon-zcash/ragu</code> (<code>WalletRank = R&lt;13&gt;</code>) with specialized <code>Step&lt;Pasta&gt;</code> circuits—enforcing state contiguity, boolean creator royalties, and Poseidon Merkle ownership inside a constant <code>7,168 B</code> proof.</p>
+          <p>Enforces owner-tag authorization, commitment contiguity, sticky <code>RoyaltyCircuit</code> routing + creator receipt preimages, and public ticket nullifiers in a 10-slot header. <em>(Terminal compressed proofs hide witnesses; uncompressed fold state is not yet unlinkable in upstream Ragu.)</em></p>
         </div>
         <div class="cell">
           <div class="cell-top">
@@ -267,24 +294,24 @@
             <span class="status-pill st-sim">Simulated In-Memory Ledger</span>
           </div>
           <h3>Orchard Seal → ZSA → Tachyon</h3>
-          <p>Implements ZIP 302 <code>0xFF||"ZYOZ"</code> memo encoding, real <code>orchard</code> address derivation, and <code>2-of-3</code> Pallas Schnorr threshold signing over simulated in-memory Orchard, ZSA, and 10k-mint Tachyon epoch ledgers.</p>
+          <p>Implements ZIP 302 <code>0xFF||"ZYOZ"</code> memo encoding, real <code>orchard</code> address derivation, owner-bound <code>MigrationCircuit</code> burn proofs, and <code>2-of-3</code> Pallas Schnorr signing over simulated Orchard, ZSA, and Tachyon ledgers.</p>
         </div>
       </div>
     </section>
 
     <section id="comparison" class="section">
       <div class="section-head">
-        <h2>Why Recursive PCD Beats Public Indexers &amp; DAG Replay</h2>
-        <span class="section-note">Full byte layouts &amp; benchmarks in <a href="/spec" style="border-bottom:1px solid var(--muted)">Spec</a> &amp; <a href="/security" style="border-bottom:1px solid var(--muted)">Security</a></span>
+        <h2>Verification &amp; Privacy Tradeoffs</h2>
+        <span class="section-note">Exact public statements in <a href="/whitepaper" style="border-bottom:1px solid var(--muted)">Whitepaper §5</a> &amp; <a href="/security" style="border-bottom:1px solid var(--muted)">Security</a></span>
       </div>
       <div class="table-scroll">
         <table>
           <thead>
             <tr>
               <th>Design Paradigm</th>
-              <th>Lineage Privacy</th>
-              <th>Step Proving Cost</th>
-              <th>Buyer Verification (H Hops)</th>
+              <th>Third-Party &amp; Inter-Owner Privacy</th>
+              <th>Warm Proving Cost</th>
+              <th>Verifier Work (H Hops)</th>
             </tr>
           </thead>
           <tbody>
@@ -296,15 +323,15 @@
             </tr>
             <tr>
               <td><strong>Client-Side DAG Validation</strong> (RGB / Taproot Assets)</td>
-              <td>Leaks prior DAG transitions to buyers</td>
+              <td>Hides from public, but buyers replay full DAG</td>
               <td>Signatures only</td>
-              <td class="mono">O(H) linear history replay</td>
+              <td class="mono">O(H) linear history scan</td>
             </tr>
             <tr>
-              <td><strong>Shielded CSV + Ragu PCD</strong> (ePrint 2025/085 · Zyoza)</td>
-              <td><strong>Zero prior owners leaked</strong></td>
-              <td><strong>Active Step&lt;Pasta&gt; circuit only</strong></td>
-              <td class="mono"><strong>O(1) (7,168 B proof, 371 ms)</strong></td>
+              <td><strong>Zyoza + Ragu PCD</strong> (Prototype Today)</td>
+              <td><strong>Compressed proof hides witnesses from verifiers</strong> <em>(inter-owner uncompressed fold awaits Ragu ZK rerandomization)</em></td>
+              <td><strong>~2.2–5.0 s / hop</strong> (active Step&lt;Pasta&gt; only)</td>
+              <td class="mono"><strong>O(1) (7,168 B, ~0.38–0.60 s)</strong></td>
             </tr>
           </tbody>
         </table>
@@ -320,12 +347,12 @@
         <div class="profile-box">
           <span class="profile-tag">NFT1</span>
           <strong>Collectibles</strong>
-          <span>Encrypted art, in-circuit royalties, lockups &amp; Nounz drops.</span>
+          <span>Encrypted art, sticky royalty-receipt gates, lockups &amp; Nounz drops.</span>
         </div>
         <div class="profile-box">
           <span class="profile-tag">TKT1</span>
           <strong>Ticketing</strong>
-          <span>One-time Poseidon check-in nullifiers with zero wallet doxxing.</span>
+          <span>Publicly exposed Poseidon check-in nullifiers blocking ticket replay.</span>
         </div>
         <div class="profile-box">
           <span class="profile-tag">CRD1</span>
@@ -357,9 +384,9 @@ cargo test --workspace --offline
 # Launch Zyoza Studio &amp; Markdown docs on http://127.0.0.1:8080
 cargo run -p zyoza-gallery-demo</pre>
         <div class="doc-links">
-          <a href="/whitepaper"><span><strong>Whitepaper (v2.0)</strong> — Enforcement, Tachyon &amp; Trust Model</span><span>→</span></a>
+          <a href="/whitepaper"><span><strong>Whitepaper (v2.1)</strong> — Public Statements, Ragu Caveats &amp; Trust Model</span><span>→</span></a>
           <a href="/spec"><span><strong>Protocol Spec</strong> — ZIP 227 Vectors &amp; 512B ZIP 302 Layout</span><span>→</span></a>
-          <a href="/security"><span><strong>Security &amp; Benchmarks</strong> — Formal Ragu Gates &amp; M2 Pro Timings</span><span>→</span></a>
+          <a href="/security"><span><strong>Security &amp; Benchmarks</strong> — Warm vs Cold Timings &amp; Circuit Equations</span><span>→</span></a>
           <a href="/demo"><span><strong>Zyoza Studio</strong> — Live 6-Step Interactive Workbench</span><span>→</span></a>
         </div>
       </div>
@@ -417,7 +444,6 @@ cargo run -p zyoza-gallery-demo</pre>
         `;
       } else {
         headSvg = `
-          <!-- Cypher Hood: tapered techwear torso + drawstrings -->
           <rect x="7" y="23" width="19" height="2" fill="#1F242E"/>
           <rect x="6" y="25" width="21" height="7" fill="#1A1E27"/>
           <rect x="6" y="25" width="2" height="7" fill="#141820"/>
@@ -428,9 +454,7 @@ cargo run -p zyoza-gallery-demo</pre>
           <rect x="19" y="23" width="1" height="5" fill="#9AA3B2"/>
           <rect x="19" y="28" width="1" height="1" fill="#22C55E"/>
           <rect x="21" y="26" width="2" height="1" fill="#F4B728"/>
-          <!-- Collar / neck taper -->
           <rect x="9" y="21" width="15" height="2" fill="#161A22"/>
-          <!-- Rounded cowl hood + inner rim + shadowed face -->
           <rect x="10" y="4" width="13" height="1" fill="#2A303D"/>
           <rect x="12" y="4" width="9" height="1" fill="#343B4B"/>
           <rect x="8" y="5" width="17" height="2" fill="#252B37"/>

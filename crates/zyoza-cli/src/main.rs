@@ -123,6 +123,8 @@ enum NftCommands {
     VerifyProof {
         #[arg(long)]
         collection_root: String,
+        #[arg(long, default_value = "0000000000000000000000000000000000000000000000000000000000000000")]
+        state_root: String,
         #[arg(long)]
         challenge: String,
         #[arg(long)]
@@ -332,10 +334,20 @@ fn main() -> Result<()> {
                 secret,
                 out,
             } => {
-                let _ = load_ledger(&dir)?;
+                let ledger = load_ledger(&dir)?;
                 let asset = AssetId(parse_32(&asset_id)?);
+                let state_root = ledger
+                    .nfts
+                    .get(&asset_id)
+                    .map(|e| e.state.state_root())
+                    .transpose()?
+                    .unwrap_or([0u8; 32]);
                 let sec_bytes = secret.into_bytes();
-                let tree = zyoza_proofs::CollectionMerkleTree::from_holdings(&[(asset, &sec_bytes)]);
+                let tree = zyoza_proofs::CollectionMerkleTree::from_holdings(&[(
+                    asset,
+                    state_root,
+                    &sec_bytes,
+                )]);
                 let root_bytes = if collection_root == "auto" {
                     tree.root()
                 } else {
@@ -343,17 +355,20 @@ fn main() -> Result<()> {
                 };
                 let proof = RaguPcdEngine.prove_ownership(&OwnershipProofRequest {
                     asset_id: asset,
+                    state_root,
                     collection_root: root_bytes,
                     merkle_siblings: tree.path(0),
                     secret_witness: sec_bytes,
                     challenge: parse_32(&challenge)?,
                 })?;
                 println!("Collection Merkle Root: {}", hex::encode(root_bytes));
+                println!("State Root:             {}", hex::encode(state_root));
                 fs::write(&out, &proof)?;
                 println!("Wrote Ragu ownership proof ({} bytes) to {}", proof.len(), out.display());
             }
             NftCommands::VerifyProof {
                 collection_root,
+                state_root,
                 challenge,
                 proof_file,
             } => {
@@ -361,6 +376,7 @@ fn main() -> Result<()> {
                 let ok = RaguPcdEngine.verify_ownership(
                     &OwnershipVerifyRequest {
                         collection_root: parse_32(&collection_root)?,
+                        state_root: parse_32(&state_root)?,
                         challenge: parse_32(&challenge)?,
                     },
                     &proof,

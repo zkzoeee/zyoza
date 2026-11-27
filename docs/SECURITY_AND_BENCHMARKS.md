@@ -1,59 +1,52 @@
 # Zyoza Security Model, Formal Constraints & Benchmarks
 
-## 1. Measured Reference Benchmarks
+## 1. Measured Warm vs. Cold Benchmarks
 
-All measurements below were collected directly from `cargo test -p zyoza-proofs --offline -- --test-threads=1 --nocapture` on **Apple M2 Pro** (`macOS`, `rustc 1.99.1 (58cf8f9c3 2026-10-13)`, Cargo profile `opt-level = 2`, Ragu `baked` + target-gated `multicore` Rayon acceleration):
+All measurements below were observed on **Apple Silicon (`Apple M2 Pro`, macOS, `rustc 1.99.1`, `opt-level = 2`, Ragu `WalletRank = R<13>`, native `multicore` Rayon enabled)** using Zyoza's dedicated single prover thread (`zyoza-ragu-prover`):
 
-| Operation | Engine / Parameters | Prove / Execute | Verify | Artifact Size |
+| Operation | Cold First Call *(incl. one-time table init)* | Warm Prover Thread *(steady-state)* | `verify_compressed` ($O(1)$) | Compressed Proof Size |
 | :--- | :--- | :--- | :--- | :--- |
-| **Ragu Recursive PCD Fold (`fuse` + `compress`)** | `tachyon-zcash/ragu` (`WalletRank = R<13>`, `multicore`) | **`2,153 ms / hop`** *(1-thread: `7,409 ms`)* | **`371 ms`** ($O(1)$) | **`7,168 B`** (`CompressedProof<Pasta>`) |
-| **Ragu Standalone Proof (`seed` + `compress`)** | `Mint` / `OwnershipMerkle` / `Cap` / `Trait` / `Migration` | **`2,026 ms`** *(warm; cold init `+4,821 ms`)* | **`371 ms`** | **`7,168 B`** (`CompressedProof<Pasta>`) |
-| **Tachyon 10,000-Mint Epoch Aggregation** | `TachyonAdapter` (simulated 14-level Merkle epoch) | `< 50 ms` | `< 1 ms` (14 hashes) | `32 B` `Tachystamp` root |
+| **One-Time Prover Init (`warmup_prover`)** | `~4.8 s` *(once per server process)* | `0 ms` *(reused across all requests)* | — | — |
+| **Standalone Seed Proof** (`Mint` / `Ownership` / `Cap` / `Trait` / `Migration`) | `~6.8–9.2 s` *(if un-warmed)* | **`~2.1–4.2 s`** *(varies with CPU thermal/core load)* | **`~370–600 ms`** | **`7,168 B`** (`CompressedProof<Pasta>`) |
+| **Recursive Lineage Fold (`Application::fuse` + `compress`)** | `~7.0–9.8 s` *(if un-warmed)* | **`~2.2–5.0 s / hop`** | **`~370–600 ms`** | **`7,168 B`** (`CompressedProof<Pasta>`) |
+| **Studio Governed Mint (`MintCircuit` + `IssuanceCapCircuit`)** | `~9.0–13.5 s` *(2 proofs + cold init)* | **`~4.2–8.4 s`** *(2 warm Ragu proofs)* | **`~370–600 ms`** | `2 x 7,168 B` |
+| **Tachyon 10,000-Mint Epoch Aggregation** *(simulated)* | `< 50 ms` | `< 50 ms` | `< 1 ms` (14 hashes) | `32 B` `Tachystamp` root |
 
-*Note on target-gated `multicore` & thread warm-up:* `crates/zyoza-proofs/Cargo.toml` enables Ragu's `multicore` (`rayon`) feature automatically on native targets (`macOS`, `Linux`, `iOS`, `Android` — cutting prove/fold latency by **~3.5x**, from `7.41 s` to `2.15 s`), while keeping `wasm32` single-threaded by default. Each worker thread initializes its baked Pasta synthesis tables once (`4.82 s` on Apple M2 Pro) and reuses them for all subsequent proofs.
-
----
-
-## 2. Threat Model, Enforcement Boundaries & Trust Assumptions
-
-1. **Double-Spending / Forked Off-Chain State**
-   * *Mechanism:* Each transition retires the prior note's commitment/nullifier and binds the new commitment in Ragu's `LineageHeader` (`left[SLOT_LATEST] == witness.prev_commit_fp`).
-   * *Prototype status:* Simulated in memory by `OrchardSealAdapter`, `OrchardZsaAdapter`, and `TachyonAdapter`. On live Zcash, Orchard consensus enforces single-spend nullifiers while buyers verify the current note opening + compressed Ragu lineage proof prior to payment.
-2. **Duplicate Collection Slot / Media Re-Minting (`CollectionSpec`)**
-   * *Mechanism:* Deterministic domain-separated nullifiers (`NF_aid`, `NF_idx`, `NF_med`) collide if an issuer attempts to mint the same slot or SHA-256 media hash twice, paired with Ragu 16-bit range proofs (`IssuanceCapCircuit`, $1 \le \text{idx} \le \text{cap}$).
-   * *Enforcement boundary:* In Stage I (pre-ZSA), `NF_*` must be published to a public bulletin/indexer stream so buyers can verify global slot uniqueness; in Stage II (ZIP 227), supply caps and `finalize = true` are enforced directly by Zcash consensus.
-3. **Metadata & Media Leakage**
-   * *Mechanism:* Payloads travel out-of-band (`zyoza-oob`) encrypted under `ChaCha20Poly1305` (`AAD = AssetId`) with ephemeral Pallas ECDH (`ecdh-pallas-hkdf-sha256`). Stage I memos start with ZIP 302 `0xFF` (`[0xFF, 'Z', 'Y', 'O', 'Z']`) so wallets never parse them as UTF-8 text.
-4. **Wallet Doxxing & Front-Running on Marketplaces**
-   * *Mechanism:* Collectors disclose individual items via per-asset `ObjectViewingKey`, prove collection holdings via Ragu `OwnershipMerkleCircuit` bound to a fresh verifier `challenge`, and bid via salted `BLAKE2b-256` commit-reveal (`revealed_zatoshis = None` until reveal).
-5. **Single Issuer Key Compromise (Stage II ZSA Crystallization)**
-   * *Mechanism:* `zyoza-settlement::frost_issuer` requires a `2-of-3` threshold Schnorr signature on Pallas before authorizing ZSA issuance. *(Prototype uses trusted-dealer `keygen_dealer`; production deployments require interactive FROST DKG.)*
-6. **Off-Chain Data Availability**
-   * *Mechanism:* Losing an `OobEnvelope` halts future CSV transfers; mitigated via content-addressed IPFS/Arweave pinning and `encrypt_backup(wallet_seed, state)` recovery snapshots.
+*Why warm vs. cold differs:* `ApplicationBuilder::finalize` builds baked Pallas/Vesta synthesis tables once (`~4.8 s`) on `zyoza-ragu-prover` (spawned automatically at `zyoza-gallery-demo` startup). Under single-threaded builds (`wasm32` without `multicore`), warm proving takes `~7.0–7.5 s` per proof; with native `multicore` (`rayon`), warm proving runs in `~2.1–5.0 s` depending on available performance cores.
 
 ---
 
-## 3. Formal Circuit Specifications (`zyoza-proofs`)
+## 2. Threat Model, Statement Bindings & Known Prototype Limits
 
-### 3.1 Ragu Non-Uniform Recursive Lineage (`Application<Pasta, WalletRank, 5>`)
-* **Public Header (`LineageHeader`, 4 $\mathbb{F}_p$ elements):**
-  $$\mathbf{h} = (\text{asset\_fp},\; \text{genesis\_commit\_fp},\; \text{latest\_commit\_fp},\; \text{acc\_fp})$$
-* **Base Step (`MintCircuit`, `Index 1`):**
-  $$\text{acc}_1 = \text{Poseidon}(1,\; \text{prof},\; \text{asset},\; \text{cmt}_1,\; \text{sec}), \quad \mathbf{h}_1 = (\text{asset},\; \text{cmt}_1,\; \text{cmt}_1,\; \text{acc}_1)$$
-* **Recursive Steps (`Index 2..5`):** Enforce contiguity and subcircuit predicates in-circuit:
-  $$\mathbf{h}_{\text{prev}}[0] - \text{asset} = 0, \qquad \mathbf{h}_{\text{prev}}[2] - \text{cmt}_{\text{prev}} = 0$$
-  * **`RoyaltyCircuit` (`Index 3`):** Allocates Boolean wires $r_{\text{req}}, r_{\text{paid}} \in \{0,1\}$ and enforces:
-    $$r_{\text{req}} \cdot (1 - r_{\text{paid}}) = 0$$
-  * **`TicketCheckInCircuit` (`Index 4`):** Computes $\text{nf}_{\text{tkt}} = \text{Poseidon}(\text{sec}, \text{cmt}_{\text{next}})$ in-circuit and absorbs $\text{nf}_{\text{tkt}}$ into $\text{acc}_{i+1}$.
+1. **Uncompressed Lineage Proof Linkability (Upstream Ragu Limit)**
+   * *Current Status:* Presenting a `7,168 B` `CompressedProof<Pasta>` to a third-party verifier hides intermediate witnesses. However, handing an asset to a *next* owner who wants to call `Application::fuse` requires transmitting the uncompressed `Proof<Pasta, WalletRank>`, which in upstream `tachyon-zcash/ragu` today is **not zero-knowledge and not unlinkable under `rerandomize`**. Full inter-owner history hiding awaits upstream Ragu ZK rerandomization.
+2. **Royalty Enforcement Scope (`RoyaltyCircuit` vs. L1 Payment)**
+   * *Current Status:* `MintCircuit` commits `royalty_req` (`0` or `1`) and `creator_tag = Poseidon(creator_secret)` into `LineageHeader`. `TransferCircuit` enforces `royalty_req == 0` (preventing bypass), and `RoyaltyCircuit` enforces `royalty_req * (Poseidon(ack_secret) - creator_tag) == 0`. In Stage I this proves **creator/escrow receipt co-authorization**, whereas trustless atomic ZEC royalty settlement requires Stage II PCZT atomic swaps.
+3. **Collection Supply Caps & Uniqueness (`IssuanceCapCircuit` + `CollectionSpec`)**
+   * *Current Status:* `IssuanceCapCircuit` proves $1 \le \text{idx} \le \text{max\_supply} \le 65,535$ bound to `(collection_id, asset_id, slot_commitment)`. Preventing an issuer from minting *two different* assets with the same `idx` requires checking deterministic `NF_idx` nullifiers in a public Stage I bulletin log (or Stage II ZSA consensus).
+4. **Gallery Ownership, State Binding & Challenge Replay (`OwnershipMerkleCircuit`)**
+   * *Current Status:* `OwnershipHeader` binds `[collection_root, state_root, challenge]`. `GalleryService` verifies that `collection_root` is registered in its multi-holder index, checks `state_root == NftState::state_root()`, and **consumes one-time server CSPRNG challenges** on `submit_listing` so replayed challenges fail. Stateless verifiers must maintain their own challenge nonce cache.
+5. **Owner Secret Stand-Ins & Orchard Note Opening**
+   * *Current Status:* Owner authorization across `LineageHeader`, `OwnershipMerkleCircuit`, `AttributeCircuit`, and `MigrationCircuit` checks `Poseidon(secret) == owner_tag` using off-chain 32-byte secrets (derived demo keys in Studio). Binding `owner_tag` and the 512-byte memo seal directly to an on-chain Orchard note commitment `cm_x` inside a circuit is a future design target.
+6. **Commit-Reveal Sealed Auctions**
+   * *Current Status:* Zyoza Studio hashes `SHA-256("ZYOZA-BID-CMT-v2" || listing_id || bidder || bid_zatoshis || salt_32)` **in the browser** before sending only `commitment_hex` to the server, keeping bid values hidden from both public observers and the server until the reveal phase.
 
-### 3.2 Ragu Poseidon-Merkle Ownership (`OwnershipMerkleCircuit`, `Index 6`)
-* Proves witness $(\text{asset}, \text{sec}, \{(\text{sib}_\ell, b_\ell)\}_{\ell=0}^{3}, \text{chal})$ satisfies:
-  $$\text{leaf} = \text{Poseidon}(\text{asset}, \text{Poseidon}(\text{sec}))$$
-  $$\text{cur}_{\ell+1} = \text{Poseidon}(\text{select}(b_\ell, \text{sib}_\ell, \text{cur}_\ell),\; \text{select}(b_\ell, \text{cur}_\ell, \text{sib}_\ell)) \quad (\ell = 0..3)$$
-  $$\text{OwnershipHeader} = \text{Poseidon}(\text{cur}_4,\; \text{chal})$$
-  Verifier recomputes $\text{Poseidon}(\text{collection\_root}, \text{chal})$ and calls `Application::verify_compressed`.
+---
 
-### 3.3 Ragu Supply-Cap, Attribute & Migration Circuits (`Index 7..9`)
-* **`IssuanceCapCircuit` (`Index 7`, `CapHeader`):** Allocates $d_{\text{lo}} = \text{idx} - 1$ and $d_{\text{hi}} = \text{cap} - \text{idx}$, calls Ragu's `Element::enforce_le::<16>(u16::MAX)` on both so neither can wrap modulo $p$, and outputs $\text{CapHeader} = d_{\text{lo}} + 1 + d_{\text{hi}}$, proving $1 \le \text{idx} \le \text{cap} \le 65,535$.
-* **`AttributeCircuit` (`Index 8`, `AttributeHeader`):** Binds $\text{owner\_leaf} = \text{Poseidon}(\text{asset}, \text{Poseidon}(\text{sec}))$ to $(\text{trait\_fp}, \text{chal})$ via $\text{Poseidon}(\text{Poseidon}(\text{owner\_leaf}, \text{trait\_fp}), \text{chal})$.
-* **`MigrationCircuit` (`Index 9`, `MigrationHeader`):** Enforces $\text{sec} \neq 0$ via `Element::enforce_nonzero`, derives $\text{burn\_nf} = \text{Poseidon}(\text{asset}, \text{sec})$, and outputs $\text{Poseidon}(\text{Poseidon}(\text{asset}, \text{cmt}_{\text{p1}}), \text{burn\_nf})$.
+## 3. Formal Circuit Equations (`ragu::Application<Pasta, WalletRank, 12>`)
+
+1. **`LineageHeader` (`Suffix 0`, 10 $\mathbb{F}_p$ slots):**
+   $$\mathbf{h} = (\text{aid},\; \text{cmt}_0,\; \text{cmt}_k,\; \text{tag}_{\text{own}},\; k,\; \text{kind},\; \text{prof},\; r_{\text{req}},\; \text{tag}_{\text{cre}},\; \text{nf}_{\text{evt}})$$
+   * **Every fold (`Index 2..5`):** $\mathbf{h}_{\text{prev}}[0] - \text{aid} = 0$, $\;\mathbf{h}_{\text{prev}}[2] - \text{cmt}_{\text{prev}} = 0$, $\;\mathbf{h}_{\text{prev}}[3] - \text{Poseidon}(\text{sec}_{\text{cur}}) = 0$.
+   * **`TransferCircuit` (`Index 2`):** $\mathbf{h}_{\text{prev}}[7] = 0$.
+   * **`RoyaltyCircuit` (`Index 3`):** $\mathbf{h}_{\text{prev}}[7] \cdot (\text{Poseidon}(\text{sec}_{\text{ack}}) - \mathbf{h}_{\text{prev}}[8]) = 0$.
+   * **`TicketCheckInCircuit` (`Index 4`):** $\text{nf}_{\text{evt}} = \text{Poseidon}(\text{Poseidon}(\text{aid}, \text{sec}_{\text{cur}}), \text{cmt}_{\text{next}})$.
+2. **`OwnershipHeader` (`Suffix 1`, 3 $\mathbb{F}_p$ slots):**
+   $$\text{leaf} = \text{Poseidon}(\text{Poseidon}(\text{aid}, \text{state\_root}), \text{Poseidon}(\text{sec})) \xrightarrow{\text{Merkle}_4} \text{collection\_root}$$
+3. **`CapHeader` (`Suffix 2`, 4 $\mathbb{F}_p$ slots):**
+   $$\text{enforce\_le}_{16}(d_{\text{lo}}, 65535), \quad \text{enforce\_le}_{16}(d_{\text{hi}}, 65535), \quad \text{cap} = d_{\text{lo}} + 1 + d_{\text{hi}}$$
+   $$\text{slot\_cmt} = \text{Poseidon}(\text{Poseidon}(\text{col\_id}, \text{aid}), \text{Poseidon}(d_{\text{lo}} + 1, \text{blind}))$$
+4. **`AttributeHeader` (`Suffix 3`, 4 $\mathbb{F}_p$ slots):**
+   $$\text{trait\_fp} \xrightarrow{\text{Merkle}_4} \text{traits\_root}, \quad \text{tag}_{\text{own}} = \text{Poseidon}(\text{sec}), \quad \text{ch}_{\text{out}} = \text{Poseidon}(\text{trait\_fp}, \text{chal})$$
+5. **`MigrationHeader` (`Suffix 4`, 4 $\mathbb{F}_p$ slots):**
+   $$\text{tag}_{\text{own}} = \text{Poseidon}(\text{sec}), \quad \text{burn\_nf} = \text{Poseidon}(\text{Poseidon}(\text{aid}, \text{cmt}_{\text{p1}}), \text{sec})$$

@@ -68,14 +68,17 @@ pub fn parse_memo_seal_json(memo_bytes: &[u8; ORCHARD_MEMO_LEN]) -> Result<Strin
 /// Verifies a Ragu Pasta Poseidon-Merkle ownership proof from hex-encoded public inputs (WASM/FFI friendly).
 pub fn verify_ownership_proof_hex(
     collection_root_hex: &str,
+    state_root_hex: &str,
     challenge_hex: &str,
     proof_bytes: &[u8],
 ) -> Result<bool, ZyozaError> {
     let collection_root = parse_hex_32(collection_root_hex)?;
+    let state_root = parse_hex_32(state_root_hex)?;
     let challenge = parse_hex_32(challenge_hex)?;
     RaguPcdEngine.verify_ownership(
         &OwnershipVerifyRequest {
             collection_root,
+            state_root,
             challenge,
         },
         proof_bytes,
@@ -189,18 +192,27 @@ mod tests {
             render_profile_preview_json("RWA1", &rwa.to_bytes().unwrap(), Some(&ovk)).unwrap();
         assert!(rwa_json.contains("Zug Note #7"));
 
-        let tree = zyoza_proofs::CollectionMerkleTree::from_holdings(&[(asset_id, b"secret")]);
+        let st_root = nft.state_root().unwrap();
+        let tree =
+            zyoza_proofs::CollectionMerkleTree::from_holdings(&[(asset_id, st_root, b"secret")]);
         let root = tree.root();
         let chal = [0xBB; 32];
         let proof = RaguPcdEngine
             .prove_ownership(&OwnershipProofRequest {
                 asset_id,
+                state_root: st_root,
                 collection_root: root,
                 merkle_siblings: tree.path(0),
                 secret_witness: b"secret".to_vec(),
                 challenge: chal,
             })
             .unwrap();
-        assert!(verify_ownership_proof_hex(&hex::encode(root), &hex::encode(chal), &proof).unwrap());
+        assert!(verify_ownership_proof_hex(
+            &hex::encode(root),
+            &hex::encode(st_root),
+            &hex::encode(chal),
+            &proof
+        )
+        .unwrap());
     }
 }
