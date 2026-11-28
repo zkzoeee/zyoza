@@ -68,7 +68,7 @@ The repo ships a `Dockerfile` and `fly.toml` for the gallery server. It runs as 
 fly deploy --ha=false
 ```
 
-* **Machine:** `shared-cpu-2x` with 1 GB RAM. The Ragu prover peaks near 360 MB, so 512 MB is too tight. On this size a fold takes about 4–5 s (about 1 s on a 10-core M-series laptop). The prover is multi-threaded, so more or dedicated vCPUs are what would speed it up.
+* **Machine:** `shared-cpu-4x` with 1 GB RAM in `iad`. The Ragu prover peaks near 360 MB, so 512 MB is too tight. On this size a fold takes about 3 s (about 1 s on a 10-core M-series laptop; 4–5 s on `shared-cpu-2x`). The prover is multi-threaded, so more or dedicated vCPUs are what would speed it up further.
 * **Idle behaviour:** the machine stops when idle and wakes on the next request. Studio state is in memory and shared by all visitors, so a stop or anyone's "Reset session" clears it.
 * **First deploy of a new app:** allocate addresses once with `fly ips allocate-v4 --shared` and `fly ips allocate-v6`.
 * **CPU features:** the `Dockerfile` builds with BMI2 and ADX enabled so Ragu uses its x86-64 assembly (about 20% faster here). The binary will not run on a CPU without them.

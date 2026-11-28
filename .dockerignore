@@ -3,3 +3,4 @@ target
 .DS_Store
 docs/social
 *.swp
+fly.toml
