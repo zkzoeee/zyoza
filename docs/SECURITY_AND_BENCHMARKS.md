@@ -14,7 +14,9 @@ All measurements below were observed on **Apple Silicon (`Apple M2 Pro`, 10 core
 
 *Why warm vs. cold differs:* `ApplicationBuilder::finalize` builds the application once (`~2.5 s`) on `zyoza-ragu-prover` (spawned automatically at `zyoza-gallery-demo` startup). Supplying a stored bootstrap proof (`with_bootstrap`) cut this to `~1.8 s` in testing, but needs a 34 MB cache file, so it is not enabled.
 
-*What changed these numbers:* moving from Ragu rev `5d22564` to `a812865` with `asm` took `fuse` from `~1.6 s` to `~0.57 s`, `compress` from `~0.95 s` to `~0.45 s`, `verify_compressed` from `~420 ms` to `~75 ms`, and the proof from `7,168 B` to `6,208 B`. Deferring compression saves a further `~0.45 s` on every hop that nobody verifies: a 6-hop lineage verified once at the end ran about 35% faster. An uncompressed (still foldable) proof is `~34 MB`. On x86-64, Ragu's assembly is only used when the build enables BMI2 and ADX; the Fly.io image does not set that yet and has not been re-measured.
+*What changed these numbers:* moving from Ragu rev `5d22564` to `a812865` with `asm` took `fuse` from `~1.6 s` to `~0.57 s`, `compress` from `~0.95 s` to `~0.45 s`, `verify_compressed` from `~420 ms` to `~75 ms`, and the proof from `7,168 B` to `6,208 B`. Deferring compression saves a further `~0.45 s` on every hop that nobody verifies: a 6-hop lineage verified once at the end ran about 35% faster. An uncompressed (still foldable) proof is `~34 MB`.
+
+*Hosted numbers (Fly.io `shared-cpu-2x`, 1 GB, x86-64):* a fold took `~5.3 s` on the old Ragu rev, `~5.1–5.3 s` on the new rev built without x86 assembly, and `~4.1–4.9 s` with `RUSTFLAGS="-C target-feature=+adx,+bmi2"` (set in the `Dockerfile`). A Studio mint went `9.8 s` -> `7.6 s` -> `5.7 s` and crystallization `6.0 s` -> `4.3 s`. The remaining gap to the laptop's `~1 s` is core count: the prover is multi-threaded and this machine has two shared vCPUs. Ragu's x86-64 assembly has no runtime CPU detection, so that binary only runs on CPUs with BMI2 and ADX.
 
 ---
 

@@ -3,6 +3,9 @@ FROM rust:1.99-slim-bookworm AS build
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 COPY . .
+# Ragu's x86-64 field assembly needs BMI2 and ADX. There is no runtime CPU detection, so this
+# binary only runs on CPUs with both (Fly's machines have them).
+ENV RUSTFLAGS="-C target-feature=+adx,+bmi2"
 RUN cargo build --release --locked -p zyoza-gallery-demo
 
 FROM debian:bookworm-slim
