@@ -31,6 +31,8 @@ primary_region = "iad"
 
 # Sized from measurement: the Ragu prover peaks near 360 MB, so 512 MB is too tight.
 # The prover is multi-threaded, so proving time scales with vCPUs: 4-5 s per fold on 2x.
+# Do not go down to shared-cpu-1x: it starts at ~7 s per fold, then exhausts its CPU burst
+# allowance after a handful of proofs and drops to ~90-100 s each.
 [[vm]]
   size = "shared-cpu-4x"
   memory = "1gb"
