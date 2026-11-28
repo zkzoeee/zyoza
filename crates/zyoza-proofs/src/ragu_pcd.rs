@@ -423,15 +423,28 @@ impl Step<Pasta> for RoyaltyCircuit<'_> {
     }
 }
 
-/// Ticket check-in step (`Index 4`): derives `event_nf = Poseidon(Poseidon(asset, holder_sec), next_cmt)`
-/// in-circuit and exposes it in `SLOT_EVENT_NF` so verifiers/gatekeepers block repeat check-ins!
+#[derive(Clone, Copy)]
+struct TicketWitness {
+    common: FoldCommonWitness,
+    event_id_fp: RaguFp,
+}
+
+/// Ticket check-in step (`Index 4`): derives `event_nf = Poseidon(asset, event_id)` in-circuit
+/// from the lineage's own asset slot and exposes it in `SLOT_EVENT_NF`.
+///
+/// The nullifier depends only on the object and the event. It does not depend on the holder or
+/// on the next state commitment, so the same ticket yields the same nullifier however often it
+/// is checked in and whoever holds it, and a gate that records nullifiers refuses the repeat.
+/// The gate must also check the nullifier is the one for its own event
+/// (`derive_ticket_event_nullifier`). Authority to check in comes from the owner check that
+/// every fold performs.
 struct TicketCheckInCircuit<'params> {
     poseidon: &'params <Pasta as ragu::Cycle>::CircuitPoseidon,
 }
 
 impl Step<Pasta> for TicketCheckInCircuit<'_> {
     const INDEX: Index = Index::new(4);
-    type Witness<'source> = FoldCommonWitness;
+    type Witness<'source> = TicketWitness;
     type Aux<'source> = ();
     type Left = LineageHeader;
     type Right = ();
@@ -459,20 +472,15 @@ impl Step<Pasta> for TicketCheckInCircuit<'_> {
         let alloc = &mut Standard::new();
         let left_enc = Encoded::new(dr, alloc, left)?;
 
-        let aid = Element::alloc(dr, alloc, witness.as_ref().map(|w| w.asset_fp))?;
-        let event_cmt = Element::alloc(dr, alloc, witness.as_ref().map(|w| w.next_commit_fp))?;
-        let holder_sec =
-            Element::alloc(dr, alloc, witness.as_ref().map(|w| w.current_owner_secret_fp))?;
+        // Use the asset the lineage itself carries, not a second allocation of it.
+        let left_slots: &FixedPayload<'dr, D, LINEAGE_SLOTS> = left_enc.as_gadget();
+        let aid = left_slots[SLOT_ASSET].clone();
+        let event_id = Element::alloc(dr, alloc, witness.as_ref().map(|w| w.event_id_fp))?;
 
-        let mut sp1 = Sponge::new(dr, self.poseidon);
-        sp1.absorb(dr, &aid)?;
-        sp1.absorb(dr, &holder_sec)?;
-        let ticket_secret = sp1.squeeze(dr)?;
-
-        let mut sp2 = Sponge::new(dr, self.poseidon);
-        sp2.absorb(dr, &ticket_secret)?;
-        sp2.absorb(dr, &event_cmt)?;
-        let ticket_nf = sp2.squeeze(dr)?;
+        let mut sp = Sponge::new(dr, self.poseidon);
+        sp.absorb(dr, &aid)?;
+        sp.absorb(dr, &event_id)?;
+        let ticket_nf = sp.squeeze(dr)?;
 
         let out = fold_lineage(
             dr,
@@ -480,7 +488,7 @@ impl Step<Pasta> for TicketCheckInCircuit<'_> {
             self.poseidon,
             4,
             left_enc.as_gadget(),
-            witness,
+            witness.map(|w| w.common),
             ticket_nf,
         )?;
         let data = fixed_header_value::<D, LINEAGE_SLOTS>(&out);
@@ -1037,6 +1045,18 @@ pub fn derive_owner_tag(secret_witness: &[u8]) -> [u8; 32] {
     poseidon_1(sec_fp).to_bytes()
 }
 
+fn event_id_to_fp(event_id: &[u8; 32]) -> RaguFp {
+    bytes_to_ragu_fp(b"ZYOZA-EVT-FP1___", &[event_id])
+}
+
+/// The nullifier a `TicketCheckInStep` exposes for `asset_id` at `event_id`:
+/// `Poseidon(asset, event)`. A gate recomputes this for its own event, compares it with the
+/// proof's `event_nullifier_bytes`, and refuses a nullifier it has already recorded.
+pub fn derive_ticket_event_nullifier(asset_id: &AssetId, event_id: &[u8; 32]) -> [u8; 32] {
+    let asset_fp = bytes_to_ragu_fp(b"ZYOZA-AID-FP1___", &[&asset_id.0]);
+    poseidon_2(asset_fp, event_id_to_fp(event_id)).to_bytes()
+}
+
 /// Derives the 32-byte `creator_tag = Poseidon(creator_royalty_secret)` for royalty receipts.
 pub fn derive_creator_tag(creator_secret: &[u8]) -> [u8; 32] {
     let sec_fp = bytes_to_ragu_fp(b"ZYOZA-ROY-FP1___", &[creator_secret]);
@@ -1208,6 +1228,10 @@ pub struct RaguStepWitness {
     pub creator_tag: [u8; 32],
     /// Creator/escrow receipt secret preimage supplied on `RoyaltyStep`.
     pub creator_ack_secret: Option<Vec<u8>>,
+    /// The event being checked in to. Required on `TicketCheckInStep`: the step exposes
+    /// `derive_ticket_event_nullifier(asset_id, event_id)` so a gate can refuse a second check-in.
+    #[serde(default)]
+    pub event_id: Option<[u8; 32]>,
 }
 
 /// Recursive Ragu PCD proof bundle. Every public field on this struct is reconstructed into
@@ -1509,13 +1533,20 @@ impl RaguPcdEngine {
                                     unit_pcd,
                                 )
                             }
-                            RaguStepKind::TicketCheckInStep => ctx.app.fuse(
-                                rng,
-                                TicketCheckInCircuit { poseidon },
-                                common,
-                                left_pcd,
-                                unit_pcd,
-                            ),
+                            RaguStepKind::TicketCheckInStep => {
+                                let event_id = step_cloned.event_id.ok_or_else(|| {
+                                    ZyozaError::Proof(
+                                        "TicketCheckInStep requires an event_id".into(),
+                                    )
+                                })?;
+                                ctx.app.fuse(
+                                    rng,
+                                    TicketCheckInCircuit { poseidon },
+                                    TicketWitness { common, event_id_fp: event_id_to_fp(&event_id) },
+                                    left_pcd,
+                                    unit_pcd,
+                                )
+                            }
                             RaguStepKind::AttributeUpgradeStep => ctx.app.fuse(
                                 rng,
                                 UpgradeCircuit { poseidon },
@@ -1984,6 +2015,7 @@ mod tests {
                     royalty_required: true,
                     creator_tag,
                     creator_ack_secret: None,
+                    event_id: None,
                 },
             )
             .unwrap();
@@ -2004,6 +2036,7 @@ mod tests {
                     royalty_required: true,
                     creator_tag,
                     creator_ack_secret: None,
+                    event_id: None,
                 },
             )
             .is_err());
@@ -2022,6 +2055,7 @@ mod tests {
                     royalty_required: true,
                     creator_tag,
                     creator_ack_secret: Some(b"creator-royalty-receipt-key".to_vec()),
+                    event_id: None,
                 },
             )
             .is_err());
@@ -2040,6 +2074,7 @@ mod tests {
                     royalty_required: true,
                     creator_tag,
                     creator_ack_secret: Some(b"forged-receipt".to_vec()),
+                    event_id: None,
                 },
             )
             .is_err());
@@ -2059,6 +2094,7 @@ mod tests {
                     royalty_required: true,
                     creator_tag,
                     creator_ack_secret: Some(b"creator-royalty-receipt-key".to_vec()),
+                    event_id: None,
                 },
             )
             .unwrap();
@@ -2078,10 +2114,42 @@ mod tests {
                     royalty_required: true,
                     creator_tag,
                     creator_ack_secret: None,
+                    event_id: Some([0x5E; 32]),
                 },
             )
             .unwrap();
         assert_ne!(pcd3.event_nullifier_bytes, [0u8; 32]);
+        // The nullifier is exactly the one a gate derives for this object at this event.
+        assert_eq!(
+            pcd3.event_nullifier_bytes,
+            derive_ticket_event_nullifier(&asset_id, &[0x5E; 32])
+        );
+
+        // A second check-in at the same event, from a later state, exposes the SAME nullifier,
+        // so a gate that records nullifiers refuses it. A different event gives a different one.
+        let ticket = |commit: u8, event: Option<[u8; 32]>| RaguStepWitness {
+            kind: RaguStepKind::TicketCheckInStep,
+            profile_id: *b"TKT1",
+            asset_id,
+            state_commitment: [commit; 32],
+            secret_witness: b"bob-sk".to_vec(),
+            next_owner_tag: None,
+            royalty_required: true,
+            creator_tag,
+            creator_ack_secret: None,
+            event_id: event,
+        };
+        let again = engine.fold_step(Some(&pcd3), &ticket(0x04, Some([0x5E; 32]))).unwrap();
+        assert!(engine.verify_pcd(&again).unwrap());
+        assert_eq!(again.event_nullifier_bytes, pcd3.event_nullifier_bytes);
+        let other = engine.fold_step(Some(&pcd3), &ticket(0x04, Some([0x5F; 32]))).unwrap();
+        assert_ne!(other.event_nullifier_bytes, pcd3.event_nullifier_bytes);
+        // A proof cannot claim another event's nullifier.
+        let mut wrong_event = again.clone();
+        wrong_event.event_nullifier_bytes = other.event_nullifier_bytes;
+        assert!(!engine.verify_pcd(&wrong_event).unwrap());
+        // The step refuses to run without an event.
+        assert!(engine.fold_step(Some(&pcd3), &ticket(0x04, None)).is_err());
 
         let t_ver = std::time::Instant::now();
         assert!(engine.verify_pcd(&pcd3).unwrap());
@@ -2247,6 +2315,7 @@ mod tests {
             royalty_required: false,
             creator_tag: derive_creator_tag(b"creator"),
             creator_ack_secret: None,
+            event_id: None,
         };
         let minted = engine
             .fold_step_deferred(None, &witness(RaguStepKind::MintStep, 1))
@@ -2409,6 +2478,7 @@ mod tests {
             royalty_required: false,
             creator_tag: derive_creator_tag(b"creator"),
             creator_ack_secret: None,
+            event_id: None,
         };
         for deferred in [false, true] {
             let t = Instant::now();

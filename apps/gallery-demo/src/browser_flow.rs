@@ -23,7 +23,7 @@ use zyoza_proofs::{
     RaguPcdProof, RaguStepKind, TraitMerkleTree,
 };
 use zyoza_studio_prover::{
-    derive_demo_actor_secret, ProofJob, ProofOutput, CREATOR_ROYALTY_SECRET,
+    derive_demo_actor_secret, ProofJob, ProofOutput, CREATOR_ROYALTY_SECRET, TICKET_EVENT_ID,
 };
 
 const MAX_SUPPLY: u64 = 100;
@@ -223,13 +223,14 @@ pub fn prepare(
                 wb.release_busy(&session_id);
                 bail!("Stage I seal already burned and crystallized into Stage II ZSA");
             }
-            let mut nonce = [0u8; 32];
             if kind == RaguStepKind::TicketCheckInStep {
-                // Fixed event id, so a second check-in collides on the event nullifier.
-                nonce = *b"ZCON-2026-MAIN-STAGE-EVENT-ID-01";
-            } else {
-                UnwrapErr(SysRng).fill_bytes(&mut nonce);
+                if let Err(e) = wb.ensure_ticket_unused(&sess.asset_id) {
+                    wb.release_busy(&session_id);
+                    return Err(e);
+                }
             }
+            let mut nonce = [0u8; 32];
+            UnwrapErr(SysRng).fill_bytes(&mut nonce);
             let state_root = match sess.nft_state.state_root() {
                 Ok(r) => r,
                 Err(e) => {
@@ -254,6 +255,7 @@ pub fn prepare(
                 owner: sess.owner.clone(),
                 next_owner: None,
                 unpaid_royalty: simulate_unpaid_royalty,
+                event_id: (kind == RaguStepKind::TicketCheckInStep).then_some(TICKET_EVENT_ID),
             };
             Ok(issue_ticket(
                 wb,
@@ -364,6 +366,7 @@ fn transfer_job(prep: &PreparedTransfer) -> ProofJob {
         owner: prep.prev_owner.clone(),
         next_owner: Some(prep.new_owner.clone()),
         unpaid_royalty: false,
+        event_id: None,
     }
 }
 
@@ -746,10 +749,35 @@ mod tests {
         )
         .is_err());
 
-        // A ticket check-in folds and exposes its event nullifier.
+        // A ticket check-in works once and exposes the nullifier for this object at this event.
         let checked = step(&mut wb, &mut gal, &mut store, fold(&sid, "TicketCheckInStep", "TKT1", false)).unwrap();
         assert_eq!(checked["step_count"], 3);
+        let nf = zyoza_proofs::derive_ticket_event_nullifier(&wb.sessions[&sid].asset_id, &TICKET_EVENT_ID);
+        assert_eq!(checked["event_nullifier_hex"], hex::encode(nf));
+
+        // A second check-in is refused up front, before the browser spends time proving.
+        let err = step(&mut wb, &mut gal, &mut store, fold(&sid, "TicketCheckInStep", "TKT1", false))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("replay blocked"), "{err}");
+        assert!(!wb.sessions[&sid].busy);
+
+        // And if a valid second proof is produced anyway, the gate still refuses it at commit:
+        // it carries the same nullifier. The ledger and the browser's lineage do not move.
+        let before = wb.sessions[&sid].commitment;
+        wb.spent_ticket_nullifiers.remove(&nf);
+        let BrowserPrepareResp { ticket, job } =
+            prepare(&mut wb, &mut gal, fold(&sid, "TicketCheckInStep", "TKT1", false)).unwrap();
+        wb.spent_ticket_nullifiers.insert(nf);
+        let output = store.run(&job).unwrap();
+        let err = commit(&mut wb, &mut gal, BrowserCommitReq { ticket, output, prove_ms: 0 })
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("replay blocked"), "{err}");
+        store.discard(&job.asset_id());
+        assert_eq!(wb.sessions[&sid].commitment, before);
         assert_eq!(wb.sessions[&sid].pcd.step_count, 3);
+        assert!(!wb.sessions[&sid].busy);
 
         // Unpaid royalty is refused by the prover itself; the session is released.
         assert!(step(&mut wb, &mut gal, &mut store, fold(&sid, "RoyaltyStep", "NFT1", true)).is_err());

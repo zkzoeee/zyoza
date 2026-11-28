@@ -25,6 +25,8 @@ use zyoza_proofs::{
 pub const CREATOR_ROYALTY_SECRET: &[u8] = b"zyoza-demo-creator-escrow-receipt-key";
 /// Receipt secret used by the Studio's "unpaid royalty" negative test.
 pub const UNPAID_ROYALTY_SECRET: &[u8] = b"unpaid-missing-receipt";
+/// The event Studio tickets check in to.
+pub const TICKET_EVENT_ID: [u8; 32] = *b"ZCON-2026-MAIN-STAGE-EVENT-ID-01";
 /// Owner secret used by the Studio's "wrong secret" negative test.
 pub const WRONG_OWNER_SECRET: &[u8] = b"wrong-attacker-secret-0000000000";
 
@@ -62,6 +64,9 @@ pub enum ProofJob {
         owner: String,
         next_owner: Option<String>,
         unpaid_royalty: bool,
+        /// Set on ticket check-ins: the event whose nullifier the step exposes.
+        #[serde(default)]
+        event_id: Option<[u8; 32]>,
     },
     /// Prove one committed trait of the object.
     Trait {
@@ -208,6 +213,7 @@ impl LineageStore {
                             royalty_required: true,
                             creator_tag: derive_creator_tag(CREATOR_ROYALTY_SECRET),
                             creator_ack_secret: None,
+                            event_id: None,
                         },
                     )
                     .map_err(|e| e.to_string())?;
@@ -226,6 +232,7 @@ impl LineageStore {
                 owner,
                 next_owner,
                 unpaid_royalty,
+                event_id,
             } => {
                 let prev = self.live(asset_id)?;
                 let ack: &[u8] = if *unpaid_royalty {
@@ -248,6 +255,7 @@ impl LineageStore {
                             royalty_required: prev.royalty_required,
                             creator_tag: prev.creator_tag_bytes,
                             creator_ack_secret: Some(ack.to_vec()),
+                            event_id: *event_id,
                         },
                     )
                     .map_err(|e| e.to_string())?;

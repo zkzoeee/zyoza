@@ -467,6 +467,12 @@ async fn demo_fold(
                 Json(json!({ "error": "Stage I seal already burned and crystallized into Stage II ZSA" })),
             );
         }
+        if kind == RaguStepKind::TicketCheckInStep {
+            if let Err(e) = outer.1.ensure_ticket_unused(&s.asset_id) {
+                outer.1.release_busy(&req.session_id);
+                return (StatusCode::BAD_REQUEST, Json(json!({ "error": e.to_string() })));
+            }
+        }
         s
     };
 
@@ -1013,6 +1019,30 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(unpaid_resp.status(), StatusCode::BAD_REQUEST);
+
+        // 2c. A ticket checks in once; a second check-in at the same event MUST be blocked!
+        let ticket_fold = || {
+            Request::builder()
+                .method("POST")
+                .uri("/api/demo/fold")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "session_id": sid,
+                        "step_kind": "TicketCheckInStep",
+                        "profile_id": "TKT1",
+                        "simulate_unpaid_royalty": false
+                    })
+                    .to_string(),
+                ))
+                .unwrap()
+        };
+        let first_checkin = app.clone().oneshot(ticket_fold()).await.unwrap();
+        assert_eq!(first_checkin.status(), StatusCode::OK);
+        let replay = app.clone().oneshot(ticket_fold()).await.unwrap();
+        assert_eq!(replay.status(), StatusCode::BAD_REQUEST);
+        let replay_body = axum::body::to_bytes(replay.into_body(), usize::MAX).await.unwrap();
+        assert!(String::from_utf8_lossy(&replay_body).contains("replay blocked"));
 
         // 3. Wrong-secret ownership proof MUST be rejected!
         let wrong_sec_resp = app

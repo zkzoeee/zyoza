@@ -9,7 +9,7 @@ pub mod ragu_pcd;
 
 pub use ragu;
 pub use ragu_pcd::{
-    bytes_to_ragu_fp, compressed_proof_len, derive_creator_tag, derive_owner_tag, poseidon_1,
+    bytes_to_ragu_fp, compressed_proof_len, derive_creator_tag, derive_owner_tag, derive_ticket_event_nullifier, poseidon_1,
     poseidon_2, warmup_prover, AttributeHeader, CapHeader, CollectionMerkleTree, IssuanceCapEngine,
     LineageHeader, MigrationHeader, OwnershipHeader, RaguCapProof, RaguMigrationProof,
     RaguPcdEngine, RaguPcdProof, RaguStepKind, RaguStepWitness, TraitMerkleTree, LINEAGE_SLOTS,

@@ -13,7 +13,7 @@ use zyoza_core::{
 use zyoza_oob::{InMemoryStorage, OobEnvelope, OobKeypair, OobStorage};
 use zyoza_profile_nft::{CollectionPolicy, MediaManifest, NftProfile, NftState, ProvenanceEvent};
 use zyoza_proofs::{
-    derive_creator_tag, derive_owner_tag, CollectionMerkleTree, IssuanceCapEngine, RaguCapProof,
+    derive_creator_tag, derive_owner_tag, derive_ticket_event_nullifier, CollectionMerkleTree, IssuanceCapEngine, RaguCapProof,
     RaguPcdEngine, RaguPcdProof, RaguStepKind, RaguStepWitness, TraitMerkleTree,
 };
 use zyoza_settlement::{
@@ -21,7 +21,7 @@ use zyoza_settlement::{
     OrchardSealAdapter, OrchardZsaAdapter,
 };
 
-pub use zyoza_studio_prover::{derive_demo_actor_secret, CREATOR_ROYALTY_SECRET};
+pub use zyoza_studio_prover::{derive_demo_actor_secret, CREATOR_ROYALTY_SECRET, TICKET_EVENT_ID};
 
 const ALLOWED_PRESETS: &[&str] = &["nounz-venetian", "nounz-mesh", "nounz-ovk", "lootz-kit"];
 
@@ -345,6 +345,18 @@ impl DemoWorkbench {
     /// Marks a server-proved session busy. Browser-proved sessions are refused here.
     pub fn acquire_busy(&mut self, session_id: &str) -> Result<DemoSession> {
         self.acquire_busy_mode(session_id, false)
+    }
+
+    /// Refuses a ticket check-in before any proving if this object already checked in.
+    pub fn ensure_ticket_unused(&self, asset_id: &AssetId) -> Result<()> {
+        let nf = derive_ticket_event_nullifier(asset_id, &TICKET_EVENT_ID);
+        if self.spent_ticket_nullifiers.contains(&nf) {
+            bail!(
+                "TicketCheckInCircuit replay blocked: event nullifier {} already spent!",
+                hex::encode(&nf[..8])
+            );
+        }
+        Ok(())
     }
 
     pub fn acquire_busy_mode(&mut self, session_id: &str, browser: bool) -> Result<DemoSession> {
@@ -721,7 +733,12 @@ impl DemoWorkbench {
         verify_ms: u128,
     ) -> Result<DemoFoldResp> {
         if kind == RaguStepKind::TicketCheckInStep {
+            // The gate: the proof must expose the nullifier for THIS event, and only once.
             let nf = next_pcd.event_nullifier_bytes;
+            if nf != derive_ticket_event_nullifier(&next_pcd.asset_id, &TICKET_EVENT_ID) {
+                self.release_busy(session_id);
+                bail!("TicketCheckInCircuit proof is for a different event");
+            }
             if !self.spent_ticket_nullifiers.insert(nf) {
                 self.release_busy(session_id);
                 bail!(
@@ -939,6 +956,7 @@ pub fn prove_mint_bundle(prep: &PreparedMint) -> Result<(RaguPcdProof, RaguCapPr
             royalty_required: true,
             creator_tag,
             creator_ack_secret: None,
+            event_id: None,
         },
     )?;
     let col_id = prep.spec.collection_id();
@@ -970,6 +988,7 @@ pub fn prove_transfer_step(prep: &PreparedTransfer) -> Result<RaguPcdProof> {
             royalty_required: prep.prev_pcd.royalty_required,
             creator_tag: prep.prev_pcd.creator_tag_bytes,
             creator_ack_secret: Some(CREATOR_ROYALTY_SECRET.to_vec()),
+            event_id: None,
         },
     )?;
     if !RaguPcdEngine.verify_pcd(&next_pcd)? {
@@ -985,12 +1004,7 @@ pub fn prove_custom_fold(
     simulate_unpaid_royalty: bool,
 ) -> Result<(RaguPcdProof, [u8; 32], [u8; 32], u128)> {
     let mut nonce = [0u8; 32];
-    if kind == RaguStepKind::TicketCheckInStep {
-        // Deterministic event commitment for Zcon demo so a second check-in collides on event_nullifier!
-        nonce = *b"ZCON-2026-MAIN-STAGE-EVENT-ID-01";
-    } else {
-        UnwrapErr(SysRng).fill_bytes(&mut nonce);
-    }
+    UnwrapErr(SysRng).fill_bytes(&mut nonce);
     let env = ZyEnvelopeAlias {
         version: PROTOCOL_VERSION,
         profile_id: prof,
@@ -1019,6 +1033,7 @@ pub fn prove_custom_fold(
             royalty_required: sess.pcd.royalty_required,
             creator_tag: sess.pcd.creator_tag_bytes,
             creator_ack_secret: ack_secret,
+            event_id: (kind == RaguStepKind::TicketCheckInStep).then_some(TICKET_EVENT_ID),
         },
     )?;
     let t_ver = std::time::Instant::now();
