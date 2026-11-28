@@ -891,14 +891,25 @@ impl Step<Pasta> for MigrationCircuit<'_> {
 
 struct CachedRagu {
     app: ZyozaRaguApp,
-    unit_proof_bytes: Vec<u8>,
+    /// Decoded once and cloned per fold: the neutral right child of every unary lineage step.
+    unit_proof: Proof<Pasta, WalletRank>,
 }
 
 impl CachedRagu {
     fn build() -> Self {
+        Self::build_with(None)
+    }
+
+    /// Builds the application. A stored bootstrap proof of the same configuration lets
+    /// `finalize` skip its bootstrap fuse (see `ApplicationBuilder::with_bootstrap`).
+    fn build_with(bootstrap: Option<Proof<Pasta, WalletRank>>) -> Self {
         let pasta = ragu::pcd::pasta::baked();
         let poseidon = Pasta::circuit_poseidon(pasta);
-        let app = ApplicationBuilder::<Pasta, WalletRank, HEADER_SIZE>::new()
+        let mut builder = ApplicationBuilder::<Pasta, WalletRank, HEADER_SIZE>::new();
+        if let Some(proof) = bootstrap {
+            builder = builder.with_bootstrap(proof).expect("bootstrap proof shape");
+        }
+        let app = builder
             .register(UnitStep)
             .expect("register UnitStep")
             .register(MintCircuit { poseidon })
@@ -924,11 +935,8 @@ impl CachedRagu {
 
         let rng = &mut UnwrapErr(SysRng);
         let (unit_pcd, ()) = app.seed(rng, UnitStep, ()).expect("seed UnitStep");
-        let unit_proof_bytes = unit_pcd.proof().to_bytes().expect("serialize unit proof");
-        Self {
-            app,
-            unit_proof_bytes,
-        }
+        let unit_proof = unit_pcd.proof().clone();
+        Self { app, unit_proof }
     }
 }
 
@@ -977,7 +985,7 @@ pub fn warmup_prover() {
     with_ragu(|_| {});
 }
 
-/// Returns the canonical byte size of a compressed Ragu proof at `WalletRank` (`7,168 bytes`).
+/// Returns the canonical byte size of a compressed Ragu proof at `WalletRank` (`6,208 bytes`).
 pub fn compressed_proof_len() -> usize {
     CompressedProof::<Pasta>::encoded_len::<WalletRank>()
 }
@@ -1332,11 +1340,49 @@ impl IssuanceCapEngine {
 pub struct RaguPcdEngine;
 
 impl RaguPcdEngine {
-    /// Seeds (`prev == None`) or recursively fuses (`prev == Some(...)`) a non-uniform Ragu step.
+    /// Seeds (`prev == None`) or recursively fuses (`prev == Some(...)`) a non-uniform Ragu step,
+    /// and compresses the result so it can be verified straight away.
     pub fn fold_step(
         &self,
         prev: Option<&RaguPcdProof>,
         step: &RaguStepWitness,
+    ) -> Result<RaguPcdProof, ZyozaError> {
+        self.fold_inner(prev, step, true)
+    }
+
+    /// Like [`fold_step`](Self::fold_step) but skips compression, which is roughly 40% of a
+    /// fold. The returned proof has an empty `compressed_proof`; it can still be folded
+    /// further, and [`compress_pcd`](Self::compress_pcd) or [`verify_pcd`](Self::verify_pcd)
+    /// compress it when a verifier needs it. Use this for hops nobody verifies.
+    pub fn fold_step_deferred(
+        &self,
+        prev: Option<&RaguPcdProof>,
+        step: &RaguStepWitness,
+    ) -> Result<RaguPcdProof, ZyozaError> {
+        self.fold_inner(prev, step, false)
+    }
+
+    /// Fills in `compressed_proof` for a proof made by `fold_step_deferred`. No-op otherwise.
+    pub fn compress_pcd(&self, proof: &mut RaguPcdProof) -> Result<(), ZyozaError> {
+        if !proof.compressed_proof.is_empty() {
+            return Ok(());
+        }
+        let data = lineage_data_from_proof(proof)?;
+        let bytes = std::mem::take(&mut proof.uncompressed_proof);
+        let (bytes, compressed) = with_ragu(move |ctx| {
+            let out = compress_lineage(ctx, &bytes, data);
+            (bytes, out)
+        });
+        proof.uncompressed_proof = bytes;
+        proof.compressed_proof = compressed?;
+        Ok(())
+    }
+
+    fn fold_inner(
+        &self,
+        prev: Option<&RaguPcdProof>,
+        step: &RaguStepWitness,
+        compress: bool,
     ) -> Result<RaguPcdProof, ZyozaError> {
         let prev_cloned = prev.cloned();
         let step_cloned = step.clone();
@@ -1415,12 +1461,7 @@ impl RaguPcdEngine {
                         )
                         .map_err(|e| ZyozaError::Proof(format!("decode left Proof: {e:?}")))?
                         .carry::<LineageHeader>(prior_data);
-                        let unit_pcd =
-                            Proof::<Pasta, WalletRank>::from_bytes(&ctx.unit_proof_bytes)
-                                .map_err(|e| {
-                                    ZyozaError::Proof(format!("decode unit Proof: {e:?}"))
-                                })?
-                                .carry::<()>(());
+                        let unit_pcd = ctx.unit_proof.clone().carry::<()>(());
 
                         let next_owner_tag_fp = match step_cloned.next_owner_tag {
                             Some(t) => RaguFp::from_bytes(t).ok_or_else(|| {
@@ -1501,14 +1542,16 @@ impl RaguPcdEngine {
                 .proof()
                 .to_bytes()
                 .map_err(|e| ZyozaError::Proof(format!("encode uncompressed proof: {e:?}")))?;
-            let compressed = ctx
-                .app
-                .compress(&pcd, rng)
-                .map_err(|e| ZyozaError::Proof(format!("ragu compress: {e:?}")))?;
-            let compressed_proof = compressed
-                .proof()
-                .to_bytes()
-                .map_err(|e| ZyozaError::Proof(format!("encode compressed proof: {e:?}")))?;
+            let compressed_proof = if compress {
+                ctx.app
+                    .compress(&pcd, rng)
+                    .map_err(|e| ZyozaError::Proof(format!("ragu compress: {e:?}")))?
+                    .proof()
+                    .to_bytes()
+                    .map_err(|e| ZyozaError::Proof(format!("encode compressed proof: {e:?}")))?
+            } else {
+                Vec::new()
+            };
 
             Ok(RaguPcdProof {
                 asset_id: step_cloned.asset_id,
@@ -1528,15 +1571,24 @@ impl RaguPcdEngine {
     }
 
     /// Cryptographically verifies all 10 header slots of a `RaguPcdProof` via `verify_compressed`.
+    ///
+    /// A proof from `fold_step_deferred` (empty `compressed_proof`) is compressed here first.
     pub fn verify_pcd(&self, proof: &RaguPcdProof) -> Result<bool, ZyozaError> {
-        if proof.compressed_proof.len() != compressed_proof_len() {
-            return Ok(false);
-        }
         let Ok(data) = lineage_data_from_proof(proof) else {
             return Ok(false);
         };
-        let proof_bytes = proof.compressed_proof.clone();
+        let deferred = proof.compressed_proof.is_empty() && !proof.uncompressed_proof.is_empty();
+        if !deferred && proof.compressed_proof.len() != compressed_proof_len() {
+            return Ok(false);
+        }
+        let compressed = proof.compressed_proof.clone();
+        let uncompressed = if deferred { proof.uncompressed_proof.clone() } else { Vec::new() };
         with_ragu(move |ctx| {
+            let proof_bytes = if deferred {
+                compress_lineage(ctx, &uncompressed, data)?
+            } else {
+                compressed
+            };
             let decoded = CompressedProof::<Pasta>::from_bytes(&proof_bytes)
                 .map_err(|e| ZyozaError::Proof(format!("decode CompressedProof: {e:?}")))?;
             ctx.app
@@ -1814,6 +1866,24 @@ impl RaguPcdEngine {
                 .map_err(|e| ZyozaError::Proof(format!("verify migration proof: {e:?}")))
         })
     }
+}
+
+/// Compresses an uncompressed lineage proof carrying `data` on the prover thread.
+fn compress_lineage(
+    ctx: &CachedRagu,
+    uncompressed: &[u8],
+    data: [RaguFp; LINEAGE_SLOTS],
+) -> Result<Vec<u8>, ZyozaError> {
+    let rng = &mut UnwrapErr(SysRng);
+    let pcd = Proof::<Pasta, WalletRank>::from_bytes(uncompressed)
+        .map_err(|e| ZyozaError::Proof(format!("decode uncompressed Proof: {e:?}")))?
+        .carry::<LineageHeader>(data);
+    ctx.app
+        .compress(&pcd, rng)
+        .map_err(|e| ZyozaError::Proof(format!("ragu compress: {e:?}")))?
+        .proof()
+        .to_bytes()
+        .map_err(|e| ZyozaError::Proof(format!("encode compressed proof: {e:?}")))
 }
 
 fn lineage_data_from_proof(proof: &RaguPcdProof) -> Result<[RaguFp; LINEAGE_SLOTS], ZyozaError> {
@@ -2161,5 +2231,207 @@ mod tests {
             .prove_cap(col_id, &a1, 101, [0x11; 32], 100)
             .unwrap();
         assert!(!cap_engine.verify_cap(col_id, &a1, 100, &cap_over).unwrap());
+    }
+
+    #[test]
+    fn deferred_fold_compresses_on_demand_and_matches_eager_statement() {
+        let engine = RaguPcdEngine;
+        let asset_id = AssetId::derive(&[0x03; 32], b"zyoza:deferred:1");
+        let witness = |kind, n: u8| RaguStepWitness {
+            kind,
+            profile_id: *b"NFT1",
+            asset_id,
+            state_commitment: [n; 32],
+            secret_witness: b"alice-sk".to_vec(),
+            next_owner_tag: None,
+            royalty_required: false,
+            creator_tag: derive_creator_tag(b"creator"),
+            creator_ack_secret: None,
+        };
+        let minted = engine
+            .fold_step_deferred(None, &witness(RaguStepKind::MintStep, 1))
+            .unwrap();
+        assert!(minted.compressed_proof.is_empty());
+
+        // A deferred proof folds further without ever being compressed.
+        let mut hop = engine
+            .fold_step_deferred(Some(&minted), &witness(RaguStepKind::TransferStep, 2))
+            .unwrap();
+        assert!(hop.compressed_proof.is_empty());
+        assert_eq!(hop.step_count, 2);
+
+        // verify_pcd compresses on demand; tampering is still rejected.
+        assert!(engine.verify_pcd(&hop).unwrap());
+        let mut tampered = hop.clone();
+        tampered.step_count = 3;
+        assert!(!engine.verify_pcd(&tampered).unwrap());
+
+        // compress_pcd fills the field in place and is then a no-op.
+        engine.compress_pcd(&mut hop).unwrap();
+        assert_eq!(hop.compressed_proof.len(), compressed_proof_len());
+        let first = hop.compressed_proof.clone();
+        engine.compress_pcd(&mut hop).unwrap();
+        assert_eq!(hop.compressed_proof, first);
+        assert!(engine.verify_pcd(&hop).unwrap());
+    }
+
+    /// Stage-by-stage timing of the prover. Run with:
+    /// `cargo test --release -p zyoza-proofs bench_ragu_stages -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn bench_ragu_stages() {
+        use std::time::Instant;
+        fn ms(t: Instant) -> f64 {
+            t.elapsed().as_secs_f64() * 1000.0
+        }
+        let t = Instant::now();
+        let ctx = CachedRagu::build();
+        println!("BENCH app_build_ms {:.0}", ms(t));
+
+        let pasta = ragu::pcd::pasta::baked();
+        let poseidon = Pasta::circuit_poseidon(pasta);
+        let rng = &mut UnwrapErr(SysRng);
+        let asset_id = AssetId::derive(&[0x01; 32], b"zyoza:bench:1");
+        let asset_fp = bytes_to_ragu_fp(b"ZYOZA-AID-FP1___", &[&asset_id.0]);
+        let profile_fp = bytes_to_ragu_fp(b"ZYOZA-PROF-FP1__", &[b"NFT1"]);
+        let secret_fp = bytes_to_ragu_fp(b"ZYOZA-SEC-FP1___", &[b"alice-sk"]);
+        let cmt = |b: u8| bytes_to_ragu_fp(b"ZYOZA-CMT-FP1___", &[&[b; 32]]);
+
+        let t = Instant::now();
+        let (mut pcd, ()) = ctx
+            .app
+            .seed(
+                rng,
+                MintCircuit { poseidon },
+                MintWitness {
+                    profile_fp,
+                    asset_fp,
+                    commit_fp: cmt(1),
+                    owner_secret_fp: secret_fp,
+                    royalty_required: false,
+                    creator_tag_fp: RaguFp::from(0u64),
+                },
+            )
+            .unwrap();
+        println!("BENCH seed_mint_ms {:.0}", ms(t));
+
+        for round in 0..3u8 {
+            let t = Instant::now();
+            let bytes = pcd.proof().to_bytes().unwrap();
+            let enc = ms(t);
+            let t = Instant::now();
+            let decoded = Proof::<Pasta, WalletRank>::from_bytes(&bytes).unwrap();
+            let dec = ms(t);
+            let t = Instant::now();
+            let unit = ctx.unit_proof.clone();
+            let dec_unit = ms(t);
+            println!(
+                "BENCH round{round} uncompressed_bytes {} encode_ms {enc:.0} decode_ms {dec:.0} clone_unit_ms {dec_unit:.0}",
+                bytes.len()
+            );
+
+            let data = *pcd.data();
+            let t = Instant::now();
+            let (next, ()) = ctx
+                .app
+                .fuse(
+                    rng,
+                    TransferCircuit { poseidon },
+                    FoldCommonWitness {
+                        asset_fp,
+                        prev_commit_fp: data[SLOT_LATEST],
+                        next_commit_fp: cmt(2 + round),
+                        profile_fp,
+                        current_owner_secret_fp: secret_fp,
+                        next_owner_tag_fp: poseidon_1(secret_fp),
+                    },
+                    decoded.carry::<LineageHeader>(data),
+                    unit.carry::<()>(()),
+                )
+                .unwrap();
+            println!("BENCH round{round} fuse_ms {:.0}", ms(t));
+
+            let t = Instant::now();
+            let compressed = ctx.app.compress(&next, rng).unwrap();
+            println!("BENCH round{round} compress_ms {:.0}", ms(t));
+            let cbytes = compressed.proof().to_bytes().unwrap();
+            let t = Instant::now();
+            let dec = CompressedProof::<Pasta>::from_bytes(&cbytes).unwrap();
+            let dms = ms(t);
+            let t = Instant::now();
+            let ok = ctx
+                .app
+                .verify_compressed(&dec.carry::<LineageHeader>(*next.data()))
+                .unwrap();
+            println!(
+                "BENCH round{round} compressed_bytes {} decode_ms {dms:.1} verify_compressed_ms {:.0} ok {ok}",
+                cbytes.len(),
+                ms(t)
+            );
+            pcd = next;
+        }
+
+        // Rebuild with the stored bootstrap proof to see what `with_bootstrap` saves.
+        let boot_bytes = ctx.app.bootstrap_proof().to_bytes().unwrap();
+        let t = Instant::now();
+        let boot = Proof::<Pasta, WalletRank>::from_bytes(&boot_bytes).unwrap();
+        let ctx2 = CachedRagu::build_with(Some(boot));
+        println!(
+            "BENCH app_build_with_bootstrap_ms {:.0} bootstrap_bytes {}",
+            ms(t),
+            boot_bytes.len()
+        );
+        drop(ctx2);
+
+        let t = Instant::now();
+        for _ in 0..10 {
+            let _ = poseidon_1(secret_fp);
+        }
+        println!("BENCH poseidon_1_ms {:.2}", ms(t) / 10.0);
+    }
+
+    /// A 6-hop lineage through the public API: compress every hop versus only at the end.
+    /// `cargo test --release -p zyoza-proofs bench_ragu_chain -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn bench_ragu_chain() {
+        use std::time::Instant;
+        let engine = RaguPcdEngine;
+        warmup_prover();
+        let asset_id = AssetId::derive(&[0x02; 32], b"zyoza:bench:chain");
+        let step = |kind, n: u8| RaguStepWitness {
+            kind,
+            profile_id: *b"NFT1",
+            asset_id,
+            state_commitment: [n; 32],
+            secret_witness: b"alice-sk".to_vec(),
+            next_owner_tag: None,
+            royalty_required: false,
+            creator_tag: derive_creator_tag(b"creator"),
+            creator_ack_secret: None,
+        };
+        for deferred in [false, true] {
+            let t = Instant::now();
+            let fold = |prev: Option<&RaguPcdProof>, w: &RaguStepWitness| {
+                if deferred {
+                    engine.fold_step_deferred(prev, w)
+                } else {
+                    engine.fold_step(prev, w)
+                }
+            };
+            let mut pcd = fold(None, &step(RaguStepKind::MintStep, 1)).unwrap();
+            for n in 2..=6u8 {
+                pcd = fold(Some(&pcd), &step(RaguStepKind::TransferStep, n)).unwrap();
+            }
+            let prove_ms = t.elapsed().as_secs_f64() * 1000.0;
+            let t = Instant::now();
+            assert!(engine.verify_pcd(&pcd).unwrap());
+            let verify_ms = t.elapsed().as_secs_f64() * 1000.0;
+            assert_eq!(pcd.step_count, 6);
+            println!(
+                "BENCH chain6 deferred={deferred} prove_ms {prove_ms:.0} final_verify_ms {verify_ms:.0} total_ms {:.0}",
+                prove_ms + verify_ms
+            );
+        }
     }
 }

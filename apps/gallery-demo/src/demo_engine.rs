@@ -500,7 +500,7 @@ impl DemoWorkbench {
         self.orchard
             .anchor_governed_mint(&prep.spec, &prep.claim, prep.commitment, &memo)?;
 
-        let compressed_proof_bytes = pcd.compressed_proof.len();
+        let compressed_proof_bytes = zyoza_proofs::compressed_proof_len();
         let slot_commitment = hex::encode(cap_proof.slot_commitment_bytes);
         let ovk = ObjectViewingKey::derive(prep.asset_id, &derive_demo_actor_secret("alice"));
 
@@ -906,7 +906,9 @@ pub struct PreparedTransfer {
 pub fn prove_mint_bundle(prep: &PreparedMint) -> Result<(RaguPcdProof, RaguCapProof)> {
     let alice_secret = derive_demo_actor_secret("alice");
     let creator_tag = derive_creator_tag(CREATOR_ROYALTY_SECRET);
-    let pcd = RaguPcdEngine.fold_step(
+    // Nobody verifies the mint proof on its own, so skip compressing it. `verify_pcd`
+    // compresses on demand if the object is listed or crystallized before any transfer.
+    let pcd = RaguPcdEngine.fold_step_deferred(
         None,
         &RaguStepWitness {
             kind: RaguStepKind::MintStep,

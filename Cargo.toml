@@ -43,7 +43,7 @@ hkdf = "0.12"
 orchard = { version = "0.16", default-features = false, features = ["std"] }
 pasta_curves = "0.6"
 pulldown-cmark = { version = "0.13", default-features = false }
-ragu = { git = "https://github.com/tachyon-zcash/ragu", rev = "5d225645e6ddce482bcbb2cb6540a7a58a83b5a8", default-features = false, features = ["baked"] }
+ragu = { git = "https://github.com/tachyon-zcash/ragu", rev = "a812865ff7aa8c2d546c7019f0a822ea8c1aa5a9", default-features = false, features = ["baked"] }
 rand = "0.10"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

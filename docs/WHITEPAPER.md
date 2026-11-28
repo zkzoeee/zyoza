@@ -2,7 +2,7 @@
 
 **Author:** `zkzoeee`  
 **Date:** November 2026 · **Version:** 2.1  
-**Status:** *Research prototype — unified 10-circuit `tachyon-zcash/ragu` PCD & ZK suite (`7,168 B` `CompressedProof<Pasta>`), Pallas ECDH, and ChaCha20-Poly1305 cryptography running over a simulated in-memory settlement ledger. Not audited.*
+**Status:** *Research prototype — unified 10-circuit `tachyon-zcash/ragu` PCD & ZK suite (`6,208 B` `CompressedProof<Pasta>`), Pallas ECDH, and ChaCha20-Poly1305 cryptography running over a simulated in-memory settlement ledger. Not audited.*
 
 ---
 
@@ -36,7 +36,7 @@ To separate **circuit existence** from **end-to-end statement binding** and **si
 
 ### 2.1 Buyer & Gallery Verification Across Encrypted Memos
 Zcash validators verify Orchard note validity and nullifiers without inspecting 512-byte memos. Verification therefore occurs at the **recipient / gallery boundary**:
-1. **Lineage & Current Commitment Check:** Before listing (`Step 04`) or crystallizing (`Step 06`), the verifier runs `RaguPcdEngine::verify_pcd` over the `7,168 B` `CompressedProof<Pasta>` (verifying all 10 `LineageHeader` slots) and checks that `latest_commitment` matches the active ledger seal commitment.
+1. **Lineage & Current Commitment Check:** Before listing (`Step 04`) or crystallizing (`Step 06`), the verifier runs `RaguPcdEngine::verify_pcd` over the `6,208 B` `CompressedProof<Pasta>` (verifying all 10 `LineageHeader` slots) and checks that `latest_commitment` matches the active ledger seal commitment.
 2. **Orchard Note Opening *(Design Target)*:** In a live mainnet wallet integration, the seller must also prove that an unspent Orchard note they are spending in the transfer transaction commits to the 512-byte Zyoza memo seal (either by revealing the note/memo viewing opening to the buyer over a private channel or via a future Orchard-action linkage gadget). In the current prototype, `OrchardSealAdapter` simulates this single-use seal retirement in memory.
 
 ### 2.2 Who Enforces `CollectionSpec` Mint Nullifiers (`NF_aid`, `NF_idx`, `NF_med`)?
@@ -80,7 +80,7 @@ Payloads encrypt once under a 256-bit `ChaCha20Poly1305` `DEK` (`AAD = AssetId`)
 
 ### 4.2 Important Privacy Caveat: Compressed vs. Uncompressed Ragu Proofs
 Upstream **`tachyon-zcash/ragu`** distinguishes two proof representations:
-1. **`CompressedProof<Pasta>` (`7,168 bytes`):** Presented to terminal verifiers (galleries, ticket gates, crystallization committees) and verified via `Application::verify_compressed`. Third-party verifiers learn **only** the public `Header` elements (§5) and nothing about intermediate witnesses.
+1. **`CompressedProof<Pasta>` (`6,208 bytes`):** Presented to terminal verifiers (galleries, ticket gates, crystallization committees) and verified via `Application::verify_compressed`. Third-party verifiers learn **only** the public `Header` elements (§5) and nothing about intermediate witnesses.
 2. **Uncompressed `Proof<Pasta, WalletRank>`:** Required as an input to `Application::fuse` when a subsequent owner extends the lineage. **As documented in upstream Ragu today, uncompressed `Proof` objects are not zero-knowledge and `rerandomize` is not yet unlinkable.** Consequently, Zyoza does **not** yet claim unlinkable history hiding against *future* downstream owners who receive the uncompressed proof to continue folding; full inter-owner unlinkability awaits upstream Ragu’s zero-knowledge rerandomization layer.
 
 ---

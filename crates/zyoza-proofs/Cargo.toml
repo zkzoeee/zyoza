@@ -17,4 +17,4 @@ zyoza-core.workspace = true
 # Enable multi-core Rayon MSM/FFT acceleration automatically on native targets
 # (macOS, Linux, Windows, iOS, Android), while keeping wasm32 single-threaded.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-ragu = { workspace = true, features = ["multicore"] }
+ragu = { workspace = true, features = ["multicore", "asm"] }

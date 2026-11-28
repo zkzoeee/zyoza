@@ -2,24 +2,26 @@
 
 ## 1. Measured Warm vs. Cold Benchmarks
 
-All measurements below were observed on **Apple Silicon (`Apple M2 Pro`, macOS, `rustc 1.99.1`, `opt-level = 2`, Ragu `WalletRank = R<13>`, native `multicore` Rayon enabled)** using Zyoza's dedicated single prover thread (`zyoza-ragu-prover`):
+All measurements below were observed on **Apple Silicon (`Apple M2 Pro`, 10 cores, macOS, `rustc 1.99.1`, `--release`, Ragu rev `a812865` at `WalletRank = R<13>`, native `multicore` and `asm` enabled)** using Zyoza's dedicated single prover thread (`zyoza-ragu-prover`). Reproduce with `cargo test --release -p zyoza-proofs bench_ragu -- --ignored --nocapture`.
 
 | Operation | Cold First Call *(incl. one-time table init)* | Warm Prover Thread *(steady-state)* | `verify_compressed` ($O(1)$) | Compressed Proof Size |
 | :--- | :--- | :--- | :--- | :--- |
-| **One-Time Prover Init (`warmup_prover`)** | `~4.8 s` *(once per server process)* | `0 ms` *(reused across all requests)* | — | — |
-| **Standalone Seed Proof** (`Mint` / `Ownership` / `Cap` / `Trait` / `Migration`) | `~6.8–9.2 s` *(if un-warmed)* | **`~2.1–4.2 s`** *(varies with CPU thermal/core load)* | **`~370–600 ms`** | **`7,168 B`** (`CompressedProof<Pasta>`) |
-| **Recursive Lineage Fold (`Application::fuse` + `compress`)** | `~7.0–9.8 s` *(if un-warmed)* | **`~2.2–5.0 s / hop`** | **`~370–600 ms`** | **`7,168 B`** (`CompressedProof<Pasta>`) |
-| **Studio Governed Mint (`MintCircuit` + `IssuanceCapCircuit`)** | `~9.0–13.5 s` *(2 proofs + cold init)* | **`~4.2–8.4 s`** *(2 warm Ragu proofs)* | **`~370–600 ms`** | `2 x 7,168 B` |
+| **One-Time Prover Init (`warmup_prover`)** | `~2.5 s` *(once per server process)* | `0 ms` *(reused across all requests)* | — | — |
+| **Standalone Seed Proof** (`Ownership` / `Cap` / `Trait` / `Migration`: `seed` + `compress`) | `~3.5 s` *(if un-warmed)* | **`~1.0–1.1 s`** | **`~70–100 ms`** | **`6,208 B`** (`CompressedProof<Pasta>`) |
+| **Recursive Lineage Fold (`Application::fuse` + `compress`)** | `~3.5 s` *(if un-warmed)* | **`~1.0 s / hop`** (`fuse` `~0.57 s` + `compress` `~0.45 s`); **`~0.6 s / hop`** with `fold_step_deferred` | **`~70–100 ms`** | **`6,208 B`** (`CompressedProof<Pasta>`) |
+| **Studio Governed Mint (`MintCircuit` + `IssuanceCapCircuit`)** | `~4.2 s` *(2 proofs + cold init)* | **`~1.7 s`** *(deferred mint seed `~0.6 s` + cap proof `~1.05 s`)* | **`~70–100 ms`** | `6,208 B` cap proof; the mint proof is compressed on demand |
 | **Tachyon 10,000-Mint Epoch Aggregation** *(simulated)* | `< 50 ms` | `< 50 ms` | `< 1 ms` (14 hashes) | `32 B` `Tachystamp` root |
 
-*Why warm vs. cold differs:* `ApplicationBuilder::finalize` builds baked Pallas/Vesta synthesis tables once (`~4.8 s`) on `zyoza-ragu-prover` (spawned automatically at `zyoza-gallery-demo` startup). Under single-threaded builds (`wasm32` without `multicore`), warm proving takes `~7.0–7.5 s` per proof; with native `multicore` (`rayon`), warm proving runs in `~2.1–5.0 s` depending on available performance cores.
+*Why warm vs. cold differs:* `ApplicationBuilder::finalize` builds the application once (`~2.5 s`) on `zyoza-ragu-prover` (spawned automatically at `zyoza-gallery-demo` startup). Supplying a stored bootstrap proof (`with_bootstrap`) cut this to `~1.8 s` in testing, but needs a 34 MB cache file, so it is not enabled.
+
+*What changed these numbers:* moving from Ragu rev `5d22564` to `a812865` with `asm` took `fuse` from `~1.6 s` to `~0.57 s`, `compress` from `~0.95 s` to `~0.45 s`, `verify_compressed` from `~420 ms` to `~75 ms`, and the proof from `7,168 B` to `6,208 B`. Deferring compression saves a further `~0.45 s` on every hop that nobody verifies: a 6-hop lineage verified once at the end ran about 35% faster. An uncompressed (still foldable) proof is `~34 MB`. On x86-64, Ragu's assembly is only used when the build enables BMI2 and ADX; the Fly.io image does not set that yet and has not been re-measured.
 
 ---
 
 ## 2. Threat Model, Statement Bindings & Known Prototype Limits
 
 1. **Uncompressed Lineage Proof Linkability (Upstream Ragu Limit)**
-   * *Current Status:* Presenting a `7,168 B` `CompressedProof<Pasta>` to a third-party verifier hides intermediate witnesses. However, handing an asset to a *next* owner who wants to call `Application::fuse` requires transmitting the uncompressed `Proof<Pasta, WalletRank>`, which in upstream `tachyon-zcash/ragu` today is **not zero-knowledge and not unlinkable under `rerandomize`**. Full inter-owner history hiding awaits upstream Ragu ZK rerandomization.
+   * *Current Status:* Presenting a `6,208 B` `CompressedProof<Pasta>` to a third-party verifier hides intermediate witnesses. However, handing an asset to a *next* owner who wants to call `Application::fuse` requires transmitting the uncompressed `Proof<Pasta, WalletRank>`, which in upstream `tachyon-zcash/ragu` today is **not zero-knowledge and not unlinkable under `rerandomize`**. Full inter-owner history hiding awaits upstream Ragu ZK rerandomization.
 2. **Royalty Enforcement Scope (`RoyaltyCircuit` vs. L1 Payment)**
    * *Current Status:* `MintCircuit` commits `royalty_req` (`0` or `1`) and `creator_tag = Poseidon(creator_secret)` into `LineageHeader`. `TransferCircuit` enforces `royalty_req == 0` (preventing bypass), and `RoyaltyCircuit` enforces `royalty_req * (Poseidon(ack_secret) - creator_tag) == 0`. In Stage I this proves **creator/escrow receipt co-authorization**, whereas trustless atomic ZEC royalty settlement requires Stage II PCZT atomic swaps.
 3. **Collection Supply Caps & Uniqueness (`IssuanceCapCircuit` + `CollectionSpec`)**

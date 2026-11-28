@@ -75,7 +75,7 @@ Transfers call `OobEnvelope::rewrap_for_recipient`, unwrapping only the 32-byte 
 
 1. **`AssetProfile`** — Vertical-specific schema, transition validation, and `ObjectViewingKey` selective-disclosure preview (`NFT1`, `TKT1`, `CRD1`, `GAM1`, `RWA1`).
 2. **`SettlementAdapter`** — Swappable anchor backend (`OrchardSealAdapter` -> `OrchardZsaAdapter` -> `TachyonAdapter`).
-3. **`ProofEngine`** — Implemented purely via `RaguPcdEngine` (`tachyon-zcash/ragu`, `Application<Pasta, WalletRank, 5>`, 10 registered `Step<Pasta>` subcircuits, `7,168 B` constant `CompressedProof<Pasta>`).
+3. **`ProofEngine`** — Implemented purely via `RaguPcdEngine` (`tachyon-zcash/ragu`, `Application<Pasta, WalletRank, 5>`, 10 registered `Step<Pasta>` subcircuits, `6,208 B` constant `CompressedProof<Pasta>`).
 
 ---
 

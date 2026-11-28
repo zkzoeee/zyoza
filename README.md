@@ -2,7 +2,7 @@
 
 **Wrapped in secrecy. Folded in proof.**
 
-Zyoza lets you mint, trade and prove ownership of collectibles, tickets, credentials, game items and deeds on Zcash, without exposing your wallet. The media stays encrypted off-chain, the chain holds a 512-byte seal, and every change of hands adds one step to a recursive proof that stays 7,168 bytes however long the history gets.
+Zyoza lets you mint, trade and prove ownership of collectibles, tickets, credentials, game items and deeds on Zcash, without exposing your wallet. The media stays encrypted off-chain, the chain holds a 512-byte seal, and every change of hands adds one step to a recursive proof that stays 6,208 bytes however long the history gets.
 
 **Live demo:** <https://zyoza.fly.dev> — landing page, the six-step [Zyoza Studio](https://zyoza.fly.dev/demo), and the rendered [whitepaper](https://zyoza.fly.dev/whitepaper).
 
@@ -68,7 +68,7 @@ The repo ships a `Dockerfile` and `fly.toml` for the gallery server. It runs as 
 fly deploy --ha=false
 ```
 
-* **Machine:** `shared-cpu-2x` with 1 GB RAM. The Ragu prover peaks near 360 MB, so 512 MB is too tight. On this size a fold takes about 5 s (about 2 s on an M-series laptop).
+* **Machine:** `shared-cpu-2x` with 1 GB RAM. The Ragu prover peaks near 360 MB, so 512 MB is too tight. On this size a fold took about 5 s before the Ragu upgrade (about 1 s on an M-series laptop now); the hosted machine has not been re-measured.
 * **Idle behaviour:** the machine stops when idle and wakes on the next request. Studio state is in memory and shared by all visitors, so a stop or anyone's "Reset session" clears it.
 * **First deploy of a new app:** allocate addresses once with `fly ips allocate-v4 --shared` and `fly ips allocate-v6`.
 * **Lockfile:** `Cargo.lock` is committed and the Docker build uses `cargo build --locked`, so every build uses the same pinned Ragu revision.
