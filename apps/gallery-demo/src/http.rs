@@ -51,7 +51,8 @@ pub fn gallery_router(gallery: SharedGallery) -> Router {
         .route("/api/listings/{id}/bids", post(commit_bid))
         .route("/api/listings/{id}/reveal", post(reveal_bid))
         .route("/api/listings/{id}/clear", post(clear_auction))
-        .route("/studio/{file}", get(studio_asset))
+        .route("/studio/worker.js", get(studio_worker))
+        .route("/studio/v/{version}/{file}", get(studio_asset))
         .route("/api/demo/browser/prepare", post(browser_prepare))
         .route("/api/demo/browser/commit", post(browser_commit))
         .route("/api/demo/browser/abort", post(browser_abort))
@@ -72,8 +73,12 @@ pub fn gallery_router(gallery: SharedGallery) -> Router {
         .with_state(app_state)
 }
 
-async fn index_page() -> Html<&'static str> {
-    Html(include_str!("index.html"))
+async fn index_page() -> Html<String> {
+    // The landing page prefetches the browser prover so it is cached before the Studio opens.
+    let prover_url = studio_version()
+        .map(|v| format!("/studio/v/{v}/zyoza_studio_prover_bg.wasm"))
+        .unwrap_or_default();
+    Html(include_str!("index.html").replace("{{PROVER_WASM_URL}}", &prover_url))
 }
 
 async fn logo_image() -> impl IntoResponse {
@@ -812,19 +817,54 @@ fn studio_wasm_dir() -> std::path::PathBuf {
         .unwrap_or_else(|| "apps/gallery-demo/wasm".into())
 }
 
-/// Serves the prover worker and the WebAssembly prover it loads. The worker script is compiled
-/// in; the prover files are read from disk, so a server without them still runs and the Studio
-/// falls back to proving on the server.
-async fn studio_asset(Path(file): Path<String>, headers: HeaderMap) -> axum::response::Response {
-    let js = "text/javascript; charset=utf-8";
-    if file == "worker.js" {
-        return ([(header::CONTENT_TYPE, js)], include_str!("studio_worker.js")).into_response();
+/// A short content hash of the built prover, or `None` if it has not been built. It goes into
+/// the URL of the prover files, which lets them be cached forever: a new build has a new URL.
+fn studio_version() -> Option<&'static str> {
+    use sha2::{Digest, Sha256};
+    static VERSION: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+    VERSION
+        .get_or_init(|| {
+            let bytes = std::fs::read(studio_wasm_dir().join("zyoza_studio_prover_bg.wasm")).ok()?;
+            Some(hex::encode(&Sha256::digest(&bytes)[..8]))
+        })
+        .as_deref()
+}
+
+/// The worker script. Small and never cached, so it always points at the current prover build.
+async fn studio_worker() -> axum::response::Response {
+    let Some(version) = studio_version() else {
+        return (
+            StatusCode::NOT_FOUND,
+            "browser prover not built; run scripts/build-studio-wasm.sh",
+        )
+            .into_response();
+    };
+    let script = include_str!("studio_worker.js").replace("__PROVER_DIR__", &format!("./v/{version}"));
+    (
+        [
+            (header::CONTENT_TYPE, "text/javascript; charset=utf-8"),
+            (header::CACHE_CONTROL, "no-cache"),
+        ],
+        script,
+    )
+        .into_response()
+}
+
+/// Serves the WebAssembly prover and its JS glue from disk under a versioned URL, cacheable
+/// forever. A server without the built files still runs; the Studio then proves on the server.
+async fn studio_asset(
+    Path((version, file)): Path<(String, String)>,
+    headers: HeaderMap,
+) -> axum::response::Response {
+    if studio_version() != Some(version.as_str()) {
+        return StatusCode::NOT_FOUND.into_response();
     }
     let content_type = match file.as_str() {
-        "zyoza_studio_prover.js" => js,
+        "zyoza_studio_prover.js" => "text/javascript; charset=utf-8",
         "zyoza_studio_prover_bg.wasm" => "application/wasm",
         _ => return StatusCode::NOT_FOUND.into_response(),
     };
+    const FOREVER: &str = "public, max-age=31536000, immutable";
     let path = studio_wasm_dir().join(&file);
     let accepts_gzip = headers
         .get(header::ACCEPT_ENCODING)
@@ -838,7 +878,8 @@ async fn studio_asset(Path(file): Path<String>, headers: HeaderMap) -> axum::res
                 [
                     (header::CONTENT_TYPE, content_type),
                     (header::CONTENT_ENCODING, "gzip"),
-                    (header::CACHE_CONTROL, "no-cache"),
+                    (header::VARY, "Accept-Encoding"),
+                    (header::CACHE_CONTROL, FOREVER),
                 ],
                 bytes,
             )
@@ -847,15 +888,15 @@ async fn studio_asset(Path(file): Path<String>, headers: HeaderMap) -> axum::res
     }
     match tokio::fs::read(&path).await {
         Ok(bytes) => (
-            [(header::CONTENT_TYPE, content_type), (header::CACHE_CONTROL, "no-cache")],
+            [
+                (header::CONTENT_TYPE, content_type),
+                (header::VARY, "Accept-Encoding"),
+                (header::CACHE_CONTROL, FOREVER),
+            ],
             bytes,
         )
             .into_response(),
-        Err(_) => (
-            StatusCode::NOT_FOUND,
-            "browser prover not built; run scripts/build-studio-wasm.sh",
-        )
-            .into_response(),
+        Err(_) => StatusCode::NOT_FOUND.into_response(),
     }
 }
 

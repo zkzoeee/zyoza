@@ -1,16 +1,25 @@
 // Zyoza Studio prover worker. Runs the WebAssembly prover off the page's main thread, so the
 // page stays responsive while a proof is computed. The lineage proof lives here, in this
 // browser tab, and is never sent to the server.
-import init, { warmup, run_job, promote, discard, has_lineage, forget_all } from './zyoza_studio_prover.js';
+//
+// The server fills in __PROVER_DIR__ with a path that contains a hash of the prover build, so
+// the browser can cache those files for good and still pick up a new build immediately.
+import init, { warmup, run_job, promote, discard, has_lineage, forget_all } from '__PROVER_DIR__/zyoza_studio_prover.js';
+
+const started = performance.now();
+const stage = (name) => self.postMessage({ progress: name, ms: Math.round(performance.now() - started) });
+// Called from inside the prover as warm-up passes each stage ("registry", then "ready").
+globalThis.zyozaProverStage = stage;
 
 let ready = null;
 function boot() {
   if (!ready) {
     ready = (async () => {
       await init();
+      stage('loaded');
       const t0 = performance.now();
       warmup();
-      return Math.round(performance.now() - t0);
+      return { warmup_ms: Math.round(performance.now() - t0), total_ms: Math.round(performance.now() - started) };
     })();
   }
   return ready;
@@ -19,9 +28,9 @@ function boot() {
 self.onmessage = async (ev) => {
   const { id, op, arg } = ev.data;
   try {
-    const warmupMs = await boot();
+    const boot_info = await boot();
     let result;
-    if (op === 'warmup') result = { warmup_ms: warmupMs };
+    if (op === 'warmup') result = boot_info;
     else if (op === 'run') {
       const t0 = performance.now();
       const output = JSON.parse(run_job(JSON.stringify(arg)));

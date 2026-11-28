@@ -897,6 +897,22 @@ impl Step<Pasta> for MigrationCircuit<'_> {
     }
 }
 
+/// Optional observer for the slow start-up stages, so a UI can show progress.
+static STAGE_HOOK: std::sync::OnceLock<fn(&'static str)> = std::sync::OnceLock::new();
+
+/// Registers a function called as prover start-up passes each stage: `"registry"` once the
+/// Ragu application is finalized, then `"ready"` once the unit proof is seeded. Set it before
+/// the first proof or `warmup_prover` call; later calls are ignored.
+pub fn set_warmup_stage_hook(hook: fn(&'static str)) {
+    let _ = STAGE_HOOK.set(hook);
+}
+
+fn report_stage(stage: &'static str) {
+    if let Some(hook) = STAGE_HOOK.get() {
+        hook(stage);
+    }
+}
+
 struct CachedRagu {
     app: ZyozaRaguApp,
     /// Decoded once and cloned per fold: the neutral right child of every unary lineage step.
@@ -940,10 +956,14 @@ impl CachedRagu {
             .expect("register MigrationCircuit")
             .finalize(pasta)
             .expect("finalize Ragu Application");
+        report_stage("registry");
 
-        let rng = &mut UnwrapErr(SysRng);
-        let (unit_pcd, ()) = app.seed(rng, UnitStep, ()).expect("seed UnitStep");
-        let unit_proof = unit_pcd.proof().clone();
+        // Every unary lineage step needs a valid proof of the empty `()` header as its right
+        // child. Ragu's bootstrap proof is exactly that (it is what `seed` itself uses), so
+        // reuse it instead of seeding a separate unit proof, which cost about a third of
+        // start-up.
+        let unit_proof = app.bootstrap_proof().clone();
+        report_stage("ready");
         Self { app, unit_proof }
     }
 }

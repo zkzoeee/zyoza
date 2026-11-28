@@ -70,8 +70,9 @@ Zyoza Studio can compute every proof in the visitor's own browser. `crates/zyoza
 ```
 
 * **Flow:** for each step the server prepares a proof job, a web worker in the page proves it, and the server verifies the result before touching the simulated ledger. The 34 MB lineage proof stays in the tab; the server keeps only the public header fields and the 6 KB compressed proof.
-* **Speed:** WebAssembly is single-threaded here. On a 10-core M-series laptop in Chrome: about 28 s to warm up, 27 s for a mint, and about 17 s for every other proving step. The Studio defaults to browser proving on larger screens and offers "the server" as a fallback.
+* **Speed:** WebAssembly is single-threaded here. On a 10-core M-series laptop in Chrome: about 16 s to warm up, 27 s for a mint, and about 17 s for every other proving step. The Studio defaults to browser proving on larger screens and offers "the server" as a fallback.
 * **Limits:** reloading the page discards the tab's lineage proof, so a browser-proved session cannot continue after a reload. Studio actors use fixed, publicly derivable stand-in secrets, so this shows where proving happens, not key custody.
+* **Loading:** the prover files are served under a URL that contains a hash of the build and are cached for a year, so a returning visitor downloads nothing. The landing page prefetches the 4 MB file on larger screens.
 * **Without the build:** if `apps/gallery-demo/wasm` is missing, the server still runs and the Studio falls back to server proving. `ZYOZA_STUDIO_WASM_DIR` overrides the directory.
 
 ## Deployment (Fly.io)

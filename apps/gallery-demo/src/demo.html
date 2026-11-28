@@ -693,7 +693,7 @@
     let proveMode = 'server';
 
     const Prover = {
-      worker: null, seq: 0, waiting: new Map(), ready: false, failed: null,
+      worker: null, seq: 0, waiting: new Map(), ready: false, failed: null, stage: 'loading', stages: {},
       start() {
         if (this.worker || this.failed) return;
         try {
@@ -703,6 +703,12 @@
           return;
         }
         this.worker.onmessage = (ev) => {
+          if (ev.data.progress) {
+            this.stage = ev.data.progress;
+            this.stages[ev.data.progress] = ev.data.ms;
+            renderModeNote();
+            return;
+          }
           const w = this.waiting.get(ev.data.id);
           if (!w) return;
           this.waiting.delete(ev.data.id);
@@ -711,7 +717,12 @@
         this.worker.onerror = (ev) => this.fail(ev.message || 'the browser prover failed to load');
         this.call('warmup').then((r) => {
           this.ready = true;
-          appendLog('[prover]', `Browser prover ready (warm-up ${(r.warmup_ms / 1000).toFixed(1)} s). Proofs now run on this device.`, 'hl');
+          const st = this.stages;
+          const sec = (ms) => (ms / 1000).toFixed(1);
+          const split = st.loaded != null && st.ready != null
+            ? ` Load ${sec(st.loaded)} s, build the Ragu application ${sec(st.ready - st.loaded)} s.`
+            : '';
+          appendLog('[prover]', `Browser prover ready in ${sec(r.total_ms)} s.${split} Proofs now run on this device.`, 'hl');
           renderModeNote();
         }).catch((e) => this.fail(e.message));
       },
@@ -772,7 +783,11 @@
       if (proveMode === 'server') {
         note.textContent = 'The server computes each proof (a few seconds per step).';
       } else if (!Prover.ready) {
-        note.textContent = 'Loading the prover into this tab (about 4 MB, then up to half a minute to warm up)…';
+        note.textContent = {
+          loading: 'Loading the prover into this tab (about 4 MB the first time)…',
+          loaded: 'Prover loaded. Building the Ragu application (about 15 s on a laptop)…',
+          registry: 'Almost ready…'
+        }[Prover.stage] || 'Warming up the prover…';
       } else {
         note.textContent = 'This tab computes each proof and keeps the lineage proof. Expect about 15–30 s per step on a laptop.';
       }

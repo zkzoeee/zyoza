@@ -335,9 +335,22 @@ mod wasm {
         Ok(AssetId(arr))
     }
 
-    /// Builds the Ragu application. Takes a while; call it once, early.
+    #[wasm_bindgen]
+    extern "C" {
+        /// Defined by the worker script: receives each warm-up stage as it completes.
+        #[wasm_bindgen(js_namespace = globalThis, js_name = zyozaProverStage)]
+        fn prover_stage(name: &str);
+    }
+
+    fn on_stage(name: &'static str) {
+        prover_stage(name);
+    }
+
+    /// Builds the Ragu application. Takes a while; call it once, early. Progress is reported
+    /// through `globalThis.zyozaProverStage`.
     #[wasm_bindgen]
     pub fn warmup() {
+        zyoza_proofs::set_warmup_stage_hook(on_stage);
         zyoza_proofs::warmup_prover();
     }
 

@@ -518,6 +518,18 @@
   </footer>
 
   <script>
+    // Fetch the Studio's browser prover (about 4 MB) into the cache while this page is read,
+    // so the Studio does not start with a download. Skipped on small screens and data-saver.
+    (function () {
+      const url = '{{PROVER_WASM_URL}}';
+      const conn = navigator.connection;
+      if (!url || (conn && conn.saveData) || Math.min(screen.width, screen.height) < 700) return;
+      const link = document.createElement('link');
+      link.rel = 'prefetch';
+      link.href = url;
+      document.head.appendChild(link);
+    })();
+
     const state = { shades: 'venetian', head: 'dumpling' };
 
     function renderCharacter() {
