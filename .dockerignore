@@ -4,3 +4,4 @@ target
 docs/social
 *.swp
 fly.toml
+apps/gallery-demo/wasm

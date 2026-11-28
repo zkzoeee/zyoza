@@ -1,3 +1,4 @@
+use crate::browser_flow::{self, BrowserCommitReq, BrowserPrepareReq};
 use crate::demo_engine::{
     prove_custom_fold, prove_listing_ownership, prove_mint_bundle, prove_session_migration,
     prove_session_trait, prove_transfer_step, DemoClearAuctionResp, DemoCommitBidReq,
@@ -8,7 +9,7 @@ use crate::{
     AuctionClearResult, CommitBidRequest, GalleryListing, GalleryService, RevealBidRequest,
 };
 use axum::extract::{Path, State};
-use axum::http::StatusCode;
+use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{Html, IntoResponse};
 use axum::routing::{get, post};
 use axum::{Json, Router};
@@ -50,6 +51,10 @@ pub fn gallery_router(gallery: SharedGallery) -> Router {
         .route("/api/listings/{id}/bids", post(commit_bid))
         .route("/api/listings/{id}/reveal", post(reveal_bid))
         .route("/api/listings/{id}/clear", post(clear_auction))
+        .route("/studio/{file}", get(studio_asset))
+        .route("/api/demo/browser/prepare", post(browser_prepare))
+        .route("/api/demo/browser/commit", post(browser_commit))
+        .route("/api/demo/browser/abort", post(browser_abort))
         .route("/api/demo/reset", post(demo_reset))
         .route("/api/demo/session/{id}", get(demo_session_status))
         .route("/api/demo/mint", post(demo_mint))
@@ -792,6 +797,117 @@ async fn demo_crystallize(
             )
         }
     }
+}
+
+/// Directory holding the built browser prover (`scripts/build-studio-wasm.sh`).
+fn studio_wasm_dir() -> std::path::PathBuf {
+    std::env::var_os("ZYOZA_STUDIO_WASM_DIR")
+        .map(Into::into)
+        .unwrap_or_else(|| "apps/gallery-demo/wasm".into())
+}
+
+/// Serves the prover worker and the WebAssembly prover it loads. The worker script is compiled
+/// in; the prover files are read from disk, so a server without them still runs and the Studio
+/// falls back to proving on the server.
+async fn studio_asset(Path(file): Path<String>, headers: HeaderMap) -> axum::response::Response {
+    let js = "text/javascript; charset=utf-8";
+    if file == "worker.js" {
+        return ([(header::CONTENT_TYPE, js)], include_str!("studio_worker.js")).into_response();
+    }
+    let content_type = match file.as_str() {
+        "zyoza_studio_prover.js" => js,
+        "zyoza_studio_prover_bg.wasm" => "application/wasm",
+        _ => return StatusCode::NOT_FOUND.into_response(),
+    };
+    let path = studio_wasm_dir().join(&file);
+    let accepts_gzip = headers
+        .get(header::ACCEPT_ENCODING)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v.contains("gzip"));
+    if accepts_gzip {
+        let mut gz = path.clone().into_os_string();
+        gz.push(".gz");
+        if let Ok(bytes) = tokio::fs::read(&gz).await {
+            return (
+                [
+                    (header::CONTENT_TYPE, content_type),
+                    (header::CONTENT_ENCODING, "gzip"),
+                    (header::CACHE_CONTROL, "no-cache"),
+                ],
+                bytes,
+            )
+                .into_response();
+        }
+    }
+    match tokio::fs::read(&path).await {
+        Ok(bytes) => (
+            [(header::CONTENT_TYPE, content_type), (header::CACHE_CONTROL, "no-cache")],
+            bytes,
+        )
+            .into_response(),
+        Err(_) => (
+            StatusCode::NOT_FOUND,
+            "browser prover not built; run scripts/build-studio-wasm.sh",
+        )
+            .into_response(),
+    }
+}
+
+/// Runs a browser-flow step with both locks held, on the blocking pool: `commit` verifies
+/// proofs, which blocks on the prover thread.
+async fn with_studio<T: Send + 'static>(
+    state: CombinedState,
+    f: impl FnOnce(&mut DemoWorkbench, &mut GalleryService) -> anyhow::Result<T> + Send + 'static,
+) -> Result<T, (StatusCode, Json<serde_json::Value>)> {
+    let joined = tokio::task::spawn_blocking(move || {
+        let mut outer = state.lock().unwrap();
+        let gal_arc = outer.0.clone();
+        let mut gal = gal_arc.lock().unwrap();
+        f(&mut outer.1, &mut gal)
+    })
+    .await;
+    match joined {
+        Ok(Ok(v)) => Ok(v),
+        Ok(Err(e)) => Err((StatusCode::BAD_REQUEST, Json(json!({ "error": e.to_string() })))),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": e.to_string() })),
+        )),
+    }
+}
+
+async fn browser_prepare(
+    State(state): State<CombinedState>,
+    Json(req): Json<BrowserPrepareReq>,
+) -> impl IntoResponse {
+    match with_studio(state, move |wb, gal| browser_flow::prepare(wb, gal, req)).await {
+        Ok(r) => (StatusCode::OK, Json(json!(r))),
+        Err(e) => e,
+    }
+}
+
+async fn browser_commit(
+    State(state): State<CombinedState>,
+    Json(req): Json<BrowserCommitReq>,
+) -> impl IntoResponse {
+    match with_studio(state, move |wb, gal| browser_flow::commit(wb, gal, req)).await {
+        Ok(r) => (StatusCode::OK, Json(r)),
+        Err(e) => e,
+    }
+}
+
+#[derive(Deserialize)]
+struct BrowserAbortReq {
+    ticket: String,
+}
+
+async fn browser_abort(
+    State(state): State<CombinedState>,
+    Json(req): Json<BrowserAbortReq>,
+) -> impl IntoResponse {
+    let mut outer = state.lock().unwrap();
+    browser_flow::abort(&mut outer.1, &req.ticket);
+    (StatusCode::OK, Json(json!({ "ok": true })))
 }
 
 fn parse_32(s: &str) -> Result<[u8; 32], (StatusCode, String)> {

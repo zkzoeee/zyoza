@@ -110,6 +110,11 @@
     .studio-kicker { font-family: var(--mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.14em; color: var(--accent); margin-bottom: 0.4rem; }
     h1 { font-family: var(--serif); font-weight: 600; font-size: clamp(1.6rem, 3vw, 2.1rem); line-height: 1.15; letter-spacing: -0.01em; margin-bottom: 0.4rem; }
     .studio-bar p { color: var(--muted); font-size: 0.93rem; max-width: 68ch; }
+    .studio-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 0.6rem 0.75rem; max-width: 22rem; }
+    .mode-pick { font-family: var(--mono); font-size: 0.74rem; color: var(--muted); display: flex; align-items: center; gap: 0.45rem; }
+    .mode-pick select { padding: 0.34rem 0.5rem; font-size: 0.8rem; }
+    .mode-note { flex-basis: 100%; text-align: right; font-size: 0.78rem; color: var(--muted); line-height: 1.4; }
+    @media (max-width: 720px) { .studio-controls { justify-content: flex-start; max-width: none; } .mode-note { text-align: left; } }
     @media (max-width: 720px) { .studio-bar-inner { padding: 1.25rem 1rem; } }
 
     .layout {
@@ -233,9 +238,18 @@
       <div>
         <div class="studio-kicker">Interactive workbench</div>
         <h1>Zyoza Studio</h1>
-        <p>Take one object through its whole life in six steps. Every proof here is computed for real by the server, and only the ledger is simulated. Alice, Bob and Carol are demo actors with derived keys.</p>
+        <p>Take one object through its whole life in six steps. Every proof is computed for real, in your own browser by default, and only the ledger is simulated. Alice, Bob and Carol are demo actors with fixed stand-in keys.</p>
       </div>
-      <button id="btn-reset" class="danger" onclick="doReset()">Reset session</button>
+      <div class="studio-controls">
+        <label class="mode-pick" for="prove-mode">Prove in
+          <select id="prove-mode" onchange="onModeChange()">
+            <option value="browser">my browser</option>
+            <option value="server">the server</option>
+          </select>
+        </label>
+        <button id="btn-reset" class="danger" onclick="doReset()">Reset session</button>
+        <div id="mode-note" class="mode-note"></div>
+      </div>
     </div>
   </div>
 
@@ -490,6 +504,7 @@
     // Recomputes exact button enabled/disabled state whenever not busy
     function syncControls() {
       const setDis = (id, d) => { const el = document.getElementById(id); if (el) el.disabled = S.busy || d; };
+      renderModeNote();
       const minted = Boolean(S.sessionId);
       const crys = S.crystallized;
 
@@ -537,11 +552,12 @@
       const bar = document.getElementById('busy-bar');
       const txt = document.getElementById('busy-text');
       const t0 = performance.now();
-      txt.textContent = `Steamed to order · ${label} (0.0s)`;
+      const where = () => (provesInBrowser() ? 'Proving in your browser' : 'Steamed to order');
+      txt.textContent = `${where()} · ${label} (0.0s)`;
       bar.classList.add('active');
       const timer = setInterval(() => {
         const sec = ((performance.now() - t0) / 1000).toFixed(1);
-        txt.textContent = `Steamed to order · ${label} (${sec}s)`;
+        txt.textContent = `${where()} · ${label} (${sec}s)`;
       }, 150);
       try {
         return await fn();
@@ -669,7 +685,145 @@
         ${lenses}`;
     }
 
+    // ── Where proofs are computed ────────────────────────────────────────────────────────────
+    // "browser": the page's prover worker (WebAssembly) holds the lineage proof and proves each
+    // step; the server only prepares the step and verifies the result.
+    // "server": the server proves, as a fallback for phones and slow machines.
+    const MODE_KEY = 'zyoza_studio_prove_mode';
+    let proveMode = 'server';
+
+    const Prover = {
+      worker: null, seq: 0, waiting: new Map(), ready: false, failed: null,
+      start() {
+        if (this.worker || this.failed) return;
+        try {
+          this.worker = new Worker('/studio/worker.js', { type: 'module' });
+        } catch (e) {
+          this.fail(e.message || 'this browser cannot start the prover worker');
+          return;
+        }
+        this.worker.onmessage = (ev) => {
+          const w = this.waiting.get(ev.data.id);
+          if (!w) return;
+          this.waiting.delete(ev.data.id);
+          if (ev.data.ok) w.resolve(ev.data.result); else w.reject(new Error(ev.data.error));
+        };
+        this.worker.onerror = (ev) => this.fail(ev.message || 'the browser prover failed to load');
+        this.call('warmup').then((r) => {
+          this.ready = true;
+          appendLog('[prover]', `Browser prover ready (warm-up ${(r.warmup_ms / 1000).toFixed(1)} s). Proofs now run on this device.`, 'hl');
+          renderModeNote();
+        }).catch((e) => this.fail(e.message));
+      },
+      fail(msg) {
+        if (this.failed) return;
+        this.failed = msg;
+        for (const w of this.waiting.values()) w.reject(new Error(msg));
+        this.waiting.clear();
+        if (proveMode === 'browser' && !S.sessionId) {
+          setMode('server');
+          appendLog('[prover]', `Browser prover unavailable (${msg}). Proving on the server instead.`, 'err');
+        }
+        renderModeNote();
+      },
+      call(op, arg) {
+        return new Promise((resolve, reject) => {
+          if (this.failed) return reject(new Error(this.failed));
+          const id = ++this.seq;
+          this.waiting.set(id, { resolve, reject });
+          this.worker.postMessage({ id, op, arg });
+        });
+      }
+    };
+
+    function provesInBrowser() { return proveMode === 'browser'; }
+
+    function defaultMode() {
+      const capable = typeof Worker === 'function' && typeof WebAssembly === 'object';
+      const small = Math.min(screen.width, screen.height) < 700 || (navigator.deviceMemory && navigator.deviceMemory < 4);
+      return capable && !small && location.protocol !== 'file:' ? 'browser' : 'server';
+    }
+
+    function setMode(mode) {
+      proveMode = mode;
+      document.getElementById('prove-mode').value = mode;
+      try { localStorage.setItem(MODE_KEY, mode); } catch (_) {}
+      if (mode === 'browser') Prover.start();
+      renderModeNote();
+    }
+
+    function onModeChange() {
+      const sel = document.getElementById('prove-mode');
+      if (S.sessionId) {
+        sel.value = proveMode;
+        appendLog('[mode]', 'Reset the session to change where proofs are computed.', 'err');
+        return;
+      }
+      if (sel.value === 'browser' && Prover.failed) {
+        sel.value = 'server';
+        appendLog('[mode]', `Browser prover unavailable (${Prover.failed}).`, 'err');
+        return;
+      }
+      setMode(sel.value);
+    }
+
+    function renderModeNote() {
+      const note = document.getElementById('mode-note');
+      if (proveMode === 'server') {
+        note.textContent = 'The server computes each proof (a few seconds per step).';
+      } else if (!Prover.ready) {
+        note.textContent = 'Loading the prover into this tab (about 4 MB, then up to half a minute to warm up)…';
+      } else {
+        note.textContent = 'This tab computes each proof and keeps the lineage proof. Expect about 15–30 s per step on a laptop.';
+      }
+      document.getElementById('prove-mode').disabled = Boolean(S.sessionId) || S.busy;
+    }
+
+    const hexOf = (bytes) => bytes.map((b) => b.toString(16).padStart(2, '0')).join('');
+
+    // Maps each server-proved endpoint to the matching browser-proved step.
+    const BROWSER_STEPS = {
+      '/api/demo/mint': (b) => ({ op: 'mint', preset: b.preset, token_index: b.token_index }),
+      '/api/demo/transfer': (b) => ({ op: 'transfer', session_id: b.session_id }),
+      '/api/demo/fold': (b) => ({ op: 'fold', ...b }),
+      '/api/demo/prove-trait': (b) => ({ op: 'trait', session_id: b.session_id }),
+      '/api/demo/list': (b) => ({ op: 'list', session_id: b.session_id, reserve_zatoshis: b.reserve_zatoshis }),
+      '/api/demo/list-wrong-secret': (b) => ({ op: 'list', session_id: b.session_id, wrong_secret: true }),
+      '/api/demo/clear': (b) => ({ op: 'clear', session_id: b.session_id }),
+      '/api/demo/crystallize': (b) => ({ op: 'crystallize', session_id: b.session_id })
+    };
+
+    // Server prepares the step, this tab proves it, the server verifies and commits.
+    async function browserStep(prepareReq) {
+      const { ticket, job } = await rawApi('/api/demo/browser/prepare', prepareReq);
+      const asset = hexOf(job.asset_id);
+      let proved;
+      try {
+        proved = await Prover.call('run', job);
+      } catch (e) {
+        await rawApi('/api/demo/browser/abort', { ticket }).catch(() => {});
+        await Prover.call('discard', asset).catch(() => {});
+        throw e;
+      }
+      try {
+        const r = await rawApi('/api/demo/browser/commit', { ticket, output: proved.output, prove_ms: proved.prove_ms });
+        await Prover.call('promote', asset);
+        appendLog('[prover]', `Proved in this browser in ${(proved.prove_ms / 1000).toFixed(1)} s; the server verified it.`, '');
+        return r;
+      } catch (e) {
+        await Prover.call('discard', asset).catch(() => {});
+        throw e;
+      }
+    }
+
     async function api(path, body, method = 'POST') {
+      if (provesInBrowser() && BROWSER_STEPS[path]) {
+        return browserStep(BROWSER_STEPS[path](body || {}));
+      }
+      return rawApi(path, body, method);
+    }
+
+    async function rawApi(path, body, method = 'POST') {
       if (location.protocol === 'file:') {
         throw new Error('Opened as local file:// — start the Rust server (`cargo run -p zyoza-gallery-demo`) to execute real Ragu proofs.');
       }
@@ -774,6 +928,7 @@
         } catch (e) {
           appendLog('[warn]', e.message, 'err');
         }
+        if (Prover.worker && !Prover.failed) await Prover.call('forget_all').catch(() => {});
         S = INITIAL_STATE();
         saveLocalSession();
         ['out-1', 'out-2', 'out-3', 'out-4', 'out-5', 'out-6'].forEach(id => {
@@ -801,6 +956,7 @@
       try {
         const s = await api(`/api/demo/session/${encodeURIComponent(saved.sessionId)}`, null, 'GET');
         S.sessionId = s.session_id;
+        setMode(s.browser ? 'browser' : 'server');
         S.mintedPreset = s.preset;
         S.tokenIndex = s.token_index;
         S.assetId = s.asset_id;
@@ -838,6 +994,9 @@
         document.getElementById('insp-owner').textContent = `Owner: ${s.owner} (demo key stand-in)`;
         syncControls();
         appendLog('[restored]', `Restored active session ${s.session_id} (${s.preset} #${s.token_index}, ${s.pcd_steps} PCD steps).`, 'hl');
+        if (s.browser && !s.crystallized) {
+          appendLog('[prover]', 'This session was proved in a browser tab, and a reload discards that tab\'s lineage proof. Reset the session to keep going.', 'err');
+        }
       } catch (_) {
         sessionStorage.removeItem(STORAGE_KEY);
       }
@@ -1139,6 +1298,9 @@
     renderPresetArt(document.getElementById('preset').value);
     syncControls();
     appendLog('[zyoza-studio]', 'Ready. Select a Nounz or Lootz specimen and click Mint.', 'hl');
+    let savedMode = null;
+    try { savedMode = localStorage.getItem(MODE_KEY); } catch (_) {}
+    setMode(savedMode === 'server' || savedMode === 'browser' ? savedMode : defaultMode());
     restoreSessionOnLoad();
   </script>
 </body>

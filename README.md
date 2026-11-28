@@ -60,6 +60,20 @@ cargo run --release -p zyoza-gallery-demo
 
 The HTML pages and docs are embedded at compile time, so rebuild and restart the server after editing anything under `apps/gallery-demo/src/*.html` or `docs/*.md`.
 
+## Proving in the browser
+
+Zyoza Studio can compute every proof in the visitor's own browser. `crates/zyoza-studio-prover` holds the Studio's proving code as plain data jobs; it runs natively in tests and compiles to WebAssembly for the page.
+
+```bash
+# Build the browser prover into apps/gallery-demo/wasm (needs the wasm32-unknown-unknown target and wasm-pack or wasm-bindgen-cli)
+./scripts/build-studio-wasm.sh
+```
+
+* **Flow:** for each step the server prepares a proof job, a web worker in the page proves it, and the server verifies the result before touching the simulated ledger. The 34 MB lineage proof stays in the tab; the server keeps only the public header fields and the 6 KB compressed proof.
+* **Speed:** WebAssembly is single-threaded here. On a 10-core M-series laptop in Chrome: about 28 s to warm up, 27 s for a mint, and about 17 s for every other proving step. The Studio defaults to browser proving on larger screens and offers "the server" as a fallback.
+* **Limits:** reloading the page discards the tab's lineage proof, so a browser-proved session cannot continue after a reload. Studio actors use fixed, publicly derivable stand-in secrets, so this shows where proving happens, not key custody.
+* **Without the build:** if `apps/gallery-demo/wasm` is missing, the server still runs and the Studio falls back to server proving. `ZYOZA_STUDIO_WASM_DIR` overrides the directory.
+
 ## Deployment (Fly.io)
 
 The repo ships a `Dockerfile` and `fly.toml` for the gallery server. It runs as a single machine with no HA:

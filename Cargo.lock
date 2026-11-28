@@ -631,8 +631,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ff2abc00be7fca6ebc474524697ae276ad847ad0a6b3faa4bcb027e9a4614ad0"
 dependencies = [
  "cfg-if",
+ "js-sys",
  "libc",
  "wasi",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -642,9 +644,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "300e883d756b2e4ec94e02791f39b04b522276138852cfc41d9fb7e904106099"
 dependencies = [
  "cfg-if",
+ "js-sys",
  "libc",
  "r-efi",
  "rand_core 0.10.1",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -854,6 +858,17 @@ name = "itoa"
 version = "1.0.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3bd1574e617a9a6c1f8f8181bd7e841e1f20e4277607ef28945765188d6284d4"
+
+[[package]]
+name = "js-sys"
+version = "0.3.106"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7883d941dae510fb2d978fc3fe018c71c9e2892fd38854de3e8b92c2e5ad9cc5"
+dependencies = [
+ "cfg-if",
+ "futures-util",
+ "wasm-bindgen",
+]
 
 [[package]]
 name = "jubjub"
@@ -1982,6 +1997,7 @@ dependencies = [
  "zyoza-proofs",
  "zyoza-sdk",
  "zyoza-settlement",
+ "zyoza-studio-prover",
 ]
 
 [[package]]
@@ -2106,6 +2122,20 @@ dependencies = [
  "serde_json",
  "thiserror",
  "zyoza-core",
+]
+
+[[package]]
+name = "zyoza-studio-prover"
+version = "0.1.0"
+dependencies = [
+ "blake2b_simd",
+ "getrandom 0.2.17",
+ "getrandom 0.4.3",
+ "serde",
+ "serde_json",
+ "wasm-bindgen",
+ "zyoza-core",
+ "zyoza-proofs",
 ]
 
 [[package]]

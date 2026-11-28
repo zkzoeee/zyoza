@@ -13,6 +13,7 @@ members = [
     "crates/zyoza-sdk",
     "crates/zyoza-cli",
     "crates/zyoza-wasm",
+    "crates/zyoza-studio-prover",
     "apps/gallery-demo",
 ]
 
@@ -57,6 +58,7 @@ zyoza-core = { path = "crates/zyoza-core" }
 zyoza-oob = { path = "crates/zyoza-oob" }
 zyoza-settlement = { path = "crates/zyoza-settlement" }
 zyoza-proofs = { path = "crates/zyoza-proofs" }
+zyoza-studio-prover = { path = "crates/zyoza-studio-prover" }
 zyoza-profile-nft = { path = "crates/zyoza-profile-nft" }
 zyoza-profile-ticket = { path = "crates/zyoza-profile-ticket" }
 zyoza-profile-cred = { path = "crates/zyoza-profile-cred" }

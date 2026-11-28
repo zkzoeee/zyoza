@@ -1,5 +1,6 @@
 //! Opt-in viewing-key gallery & commit-reveal sealed-bid auction service for Zyoza NFTs.
 
+pub mod browser_flow;
 pub mod demo_engine;
 pub mod http;
 

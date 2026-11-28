@@ -1,6 +1,5 @@
 use crate::{CommitBidRequest, GalleryService, RevealBidRequest};
 use anyhow::{bail, Result};
-use blake2b_simd::Params as Blake2bParams;
 use rand::rand_core::UnwrapErr;
 use rand::rngs::SysRng;
 use rand::Rng;
@@ -22,20 +21,9 @@ use zyoza_settlement::{
     OrchardSealAdapter, OrchardZsaAdapter,
 };
 
-const CREATOR_ROYALTY_SECRET: &[u8] = b"zyoza-demo-creator-escrow-receipt-key";
-const ALLOWED_PRESETS: &[&str] = &["nounz-venetian", "nounz-mesh", "nounz-ovk", "lootz-kit"];
+pub use zyoza_studio_prover::{derive_demo_actor_secret, CREATOR_ROYALTY_SECRET};
 
-/// Derives a deterministic 32-byte demo secret stand-in for simulated Studio actors (`alice`, `bob`, `carol`).
-pub fn derive_demo_actor_secret(actor: &str) -> [u8; 32] {
-    let mut h = Blake2bParams::new()
-        .hash_length(32)
-        .personal(b"ZYOZA-DEMO-ACT1_")
-        .to_state();
-    h.update(actor.as_bytes());
-    let mut out = [0u8; 32];
-    out.copy_from_slice(h.finalize().as_bytes());
-    out
-}
+const ALLOWED_PRESETS: &[&str] = &["nounz-venetian", "nounz-mesh", "nounz-ovk", "lootz-kit"];
 
 pub fn validate_preset(preset: &str) -> Result<BTreeMap<String, String>> {
     if !ALLOWED_PRESETS.contains(&preset) {
@@ -113,6 +101,7 @@ pub struct DemoSessionStatusResp {
     pub listing_id: Option<u64>,
     pub crystallized: bool,
     pub busy: bool,
+    pub browser: bool,
 }
 
 #[derive(Serialize)]
@@ -250,6 +239,9 @@ pub struct DemoSession {
     pub listing_id: Option<u64>,
     pub crystallized: bool,
     pub busy: bool,
+    /// True when the visitor's browser holds the lineage proof and does the proving. The server
+    /// then keeps only the public view (header fields and the compressed proof).
+    pub browser: bool,
 }
 
 /// Interactive cryptographic workbench backing `/demo` (Zyoza Studio).
@@ -262,6 +254,9 @@ pub struct DemoWorkbench {
     pub sessions: HashMap<String, DemoSession>,
     pub spent_ticket_nullifiers: HashSet<[u8; 32]>,
     background_holdings: Vec<(AssetId, [u8; 32], [u8; 32])>,
+    /// Proof jobs handed to a browser and not yet committed, by ticket.
+    pub pending: HashMap<String, crate::browser_flow::PendingJob>,
+    pub next_ticket: u64,
 }
 
 impl Default for DemoWorkbench {
@@ -291,6 +286,8 @@ impl Default for DemoWorkbench {
             sessions: HashMap::new(),
             spent_ticket_nullifiers: HashSet::new(),
             background_holdings,
+            pending: HashMap::new(),
+            next_ticket: 0,
         }
     }
 }
@@ -345,11 +342,22 @@ impl DemoWorkbench {
         ))
     }
 
+    /// Marks a server-proved session busy. Browser-proved sessions are refused here.
     pub fn acquire_busy(&mut self, session_id: &str) -> Result<DemoSession> {
+        self.acquire_busy_mode(session_id, false)
+    }
+
+    pub fn acquire_busy_mode(&mut self, session_id: &str, browser: bool) -> Result<DemoSession> {
         let sess = self
             .sessions
             .get_mut(session_id)
             .ok_or_else(|| anyhow::anyhow!("session {session_id} not found (reset or mint first)"))?;
+        if sess.browser != browser {
+            if sess.browser {
+                bail!("session {session_id} proves in the browser; the server does not hold its lineage proof");
+            }
+            bail!("session {session_id} proves on the server; reset to switch to browser proving");
+        }
         if sess.busy {
             bail!("another proof is currently in progress for session {session_id}");
         }
@@ -382,6 +390,7 @@ impl DemoWorkbench {
             listing_id: sess.listing_id,
             crystallized: sess.crystallized,
             busy: sess.busy,
+            browser: sess.browser,
         })
     }
 
@@ -523,6 +532,7 @@ impl DemoWorkbench {
                 listing_id: None,
                 crystallized: false,
                 busy: false,
+                browser: false,
             },
         );
 
@@ -551,7 +561,16 @@ impl DemoWorkbench {
         session_id: &str,
         new_owner: &str,
     ) -> Result<PreparedTransfer> {
-        let sess = self.acquire_busy(session_id)?;
+        self.prep_transfer_mode(session_id, new_owner, false)
+    }
+
+    pub fn prep_transfer_mode(
+        &mut self,
+        session_id: &str,
+        new_owner: &str,
+        browser: bool,
+    ) -> Result<PreparedTransfer> {
+        let sess = self.acquire_busy_mode(session_id, browser)?;
         if sess.crystallized {
             self.release_busy(session_id);
             bail!("Stage I seal already burned and crystallized into Stage II ZSA");

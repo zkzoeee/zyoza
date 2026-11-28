@@ -22,6 +22,7 @@ zyoza-profile-nft.workspace = true
 zyoza-proofs.workspace = true
 zyoza-sdk.workspace = true
 zyoza-settlement.workspace = true
+zyoza-studio-prover.workspace = true
 
 [dev-dependencies]
 tower.workspace = true
